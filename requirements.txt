@@ -1,0 +1,3 @@
+watchdog==6.0.0
+pyyaml==6.0.2
+wxpusher==2.3.0
