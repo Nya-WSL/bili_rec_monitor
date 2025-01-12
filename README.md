@@ -32,7 +32,8 @@
         ```
     
     - 修改配置
-    
+        - 复制 `config.example.yml` 为 `config.yml`
+
         - 修改 `config.yml`
         
             - #### debug
