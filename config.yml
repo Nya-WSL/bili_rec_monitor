@@ -1,6 +1,7 @@
+version: "1.1.0" # 配置文件版本，与程序版本不匹配将会报错
 debug: true # 是否开启debug日志
 pusher: true # 是否启用微信推送
-file_suffix: ".flv" # 监听的文件后缀
+file_suffix: [".flv", ".xml", ".png", ".jpg", ".cover.jpg", "txt"] # 监听的文件后缀
 timer: 360 # 计时器时长，单位：秒，类型：[浮点数，整数]
 appToken: "" # https://wxpusher.zjiecode.com/admin
 topic_ids: [] # https://wxpusher.zjiecode.com/admin

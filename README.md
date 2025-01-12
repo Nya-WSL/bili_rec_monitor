@@ -2,7 +2,7 @@
 
 ![python](https://img.shields.io/badge/Version-1.1.0-cyan) ![python](https://img.shields.io/badge/Python->=3.9,<3.14-blue) ![watchdog](https://img.shields.io/badge/watchdog-6.0.0-blue) ![os](https://img.shields.io/badge/OS-Only_Linux-orange)
 
-基于[OneDrive Client for Linux](https://github.com/abraunegg/onedrive/)和 `watchdog` 的文件监视器，用于监视指定文件夹中的文件变化，并在文件发生变化时进行相应的操作。
+基于[OneDrive Client for Linux](https://github.com/abraunegg/onedrive/)和[watchdog](https://pypi.org/project/watchdog/)的BILIBILI录播文件监视器，用于监视指定文件夹中的文件变化，并在文件发生变化时进行相应的操作。
 
 注：仅支持 **`Linux`** ，仅在  **`Ubuntu Server`** & **`Kali Linux`** 中进行过测试
 
