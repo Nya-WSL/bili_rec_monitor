@@ -4,7 +4,7 @@ from watchdog.observers import Observer
 from watchdog.events import *
 from watchdog.utils.dirsnapshot import DirectorySnapshot, DirectorySnapshotDiff
 
-version = "1.1.0"
+version = "1.1.1"
 
 if os.path.exists("config.yml"):
     with open("config.yml", "r", encoding="utf-8") as f:
@@ -45,25 +45,24 @@ class FileEventHandler(FileSystemEventHandler):
         self.aim_path = aim_path
         self.timer = None
         self.snapshot = DirectorySnapshot(self.aim_path)
-    
+
+    def Timer(self):
+        timer = threading.Timer(config["timer"], self.checkSnapshot)
+        timer.start()
+        FileEventHandler.second = 0
+        FileEventHandler.minute = 0
+        FileEventHandler.hour = 0
+        return timer
+
+    def cancel_timer(self):
+        FileEventHandler.Timer(self).cancel()
+
     def on_any_event(self, event):
-        if self.timer:
-            self.timer.cancel()
-        
-        self.timer = threading.Timer(config["timer"], self.checkSnapshot)
-        self.timer.start()
-        self.second = 0
-        self.minute = 0
-        self.hour = 0
-        # print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "计时器重置", sep=": ")
-    
-    def cancel_timer(self, status):
-        if status:
-            self.timer = threading.Timer(config["timer"], self.checkSnapshot)
-            self.timer.start()
-        else:
-            self.timer.cancel()
-    
+        if FileEventHandler.Timer(self):
+            FileEventHandler.cancel_timer(self)
+
+        FileEventHandler.Timer(self)
+
     def checkSnapshot(self):
         snapshot = DirectorySnapshot(self.aim_path)
         diff = DirectorySnapshotDiff(self.snapshot, snapshot)
@@ -72,8 +71,8 @@ class FileEventHandler(FileSystemEventHandler):
         upload_status = False
         file_list = []
 
-        print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "计时器结束", sep=": ")
-        self.cancel_timer(self, False)
+        # print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "计时器结束", sep=": ")
+        FileEventHandler.cancel_timer(self)
 
         for file in diff.files_modified + diff.files_created:
             for suffix in config["file_suffix"]:
@@ -101,7 +100,6 @@ class FileEventHandler(FileSystemEventHandler):
                 message = str(file_list).replace("[", "").replace("]", "").replace("'", "").replace(",", "\n").replace(config["watch_dir"] + upload_dir[0] + "/", "")
                 pusher(f"Nya-WSL BILIBILI Record Monitor:\n\n已上传文件：\n{message}\n\nBug Report：\nsupport@nya-wsl.com\nhttps://github.com/Nya-WSL/bili_rec_monitor")
             os.system(config["cmd"])
-            self.cancel_timer(self, True)
 
 class DirMonitor(object):
     """文件夹监视类"""
