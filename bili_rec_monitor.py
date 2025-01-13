@@ -4,7 +4,7 @@ from watchdog.observers import Observer
 from watchdog.events import *
 from watchdog.utils.dirsnapshot import DirectorySnapshot, DirectorySnapshotDiff
 
-version = "1.1.1"
+version = "1.2.1"
 
 if os.path.exists("config.yml"):
     with open("config.yml", "r", encoding="utf-8") as f:
@@ -47,18 +47,21 @@ class FileEventHandler(FileSystemEventHandler):
         self.snapshot = DirectorySnapshot(self.aim_path)
 
     def Timer(self):
-        timer = threading.Timer(config["timer"], self.checkSnapshot)
-        timer.start()
+        if self.timer:
+            self.timer.cancel()
+
+        self.timer = threading.Timer(config["timer"], self.checkSnapshot)
+        self.timer.start()
         FileEventHandler.second = 0
         FileEventHandler.minute = 0
         FileEventHandler.hour = 0
-        return timer
+        return self.timer
 
     def cancel_timer(self):
-        FileEventHandler.Timer(self).cancel()
+        self.timer.cancel()
 
     def on_any_event(self, event):
-        if FileEventHandler.Timer(self):
+        if self.timer:
             FileEventHandler.cancel_timer(self)
 
         FileEventHandler.Timer(self)
@@ -77,19 +80,15 @@ class FileEventHandler(FileSystemEventHandler):
         for file in diff.files_modified + diff.files_created:
             for suffix in config["file_suffix"]:
                 if os.path.basename(file).endswith(suffix):
-                    upload_dir = os.path.split(file)[0].split(config["watch_dir"])[1].split("/")
-                    upload_dir = upload_dir[0] + "/" + upload_dir[2]
-                    upload_dir = os.path.join(config["upload_dir"], upload_dir)
+                    upload_dir_old = os.path.split(file)[0].split(config["watch_dir"])[1].split("/")
+                    upload_dir = os.path.join(config["upload_dir"], upload_dir_old[0], upload_dir_old[2])
                     if not os.path.exists(upload_dir):
                         os.mkdir(upload_dir)
-                    os.system(f'cp -r "{file}" {upload_dir}/')
-                    log = f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {file} - Copied!"
+                    cp_cmd = os.system(f'cp -rv "{file}" {upload_dir}/')
+                    log = f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {cp_cmd}"
                     if config["debug"]:
                         with open("debug.log", "a+", encoding="utf-8") as f:
                             f.write(log)
-                        print(log)
-                    else:
-                        print(log)
                     file_list.append(f'{file}')
                     upload_status = True
 
@@ -97,9 +96,11 @@ class FileEventHandler(FileSystemEventHandler):
             if config["pusher"]:
                 if config["debug"]:
                     print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), file_list, sep=": ")
-                message = str(file_list).replace("[", "").replace("]", "").replace("'", "").replace(",", "\n").replace(config["watch_dir"] + upload_dir[0] + "/", "")
+                message = str(file_list).replace("[", "").replace("]", "").replace("'", "").replace(",", "\n").replace(config["watch_dir"] + upload_dir_old[0] + "/", "")
                 pusher(f"Nya-WSL BILIBILI Record Monitor:\n\n已上传文件：\n{message}\n\nBug Report：\nsupport@nya-wsl.com\nhttps://github.com/Nya-WSL/bili_rec_monitor")
             os.system(config["cmd"])
+            if config["del_after_cmd"]:
+                os.system(f'rm -rf {upload_dir}/*')
 
 class DirMonitor(object):
     """文件夹监视类"""
