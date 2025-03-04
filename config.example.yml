@@ -1,11 +1,12 @@
-version: "1.2.3" # 配置文件版本，与程序版本不匹配将会报错
-debug: true # 是否开启debug日志
 pusher: true # 是否启用微信推送
-file_suffix: [".flv", ".xml", ".png", ".jpg", ".cover.jpg", ".txt"] # 监听的文件后缀
-timer: 360 # 计时器时长，单位：秒，类型：[浮点数，整数]
-appToken: "" # https://wxpusher.zjiecode.com/admin
-topic_ids: [] # https://wxpusher.zjiecode.com/admin
-watch_dir: "" # 需监听的目录，末尾必须加“/”
-upload_dir: "" # 上传目录
-cmd: '' # 触发的命令
-del_after_cmd: true # 是否在命令执行后删除上传目录的文件
+AppToken: "" # 推送平台应用token，https://wxpusher.zjiecode.com/admin/main/app/appToken
+TopicIds: [] # 推送平台主题id，https://wxpusher.zjiecode.com/admin/main/topics/list
+
+# 通知类型
+notice:
+  SessionStarted: true # 开始录制
+  FileOpening: true # 开始写入录播文件
+  FileClosed: true # 停止写入录播文件
+  SessionEnded: true # 结束录制
+  StreamStarted: true # 开始直播
+  StreamEnded: true # 停止直播

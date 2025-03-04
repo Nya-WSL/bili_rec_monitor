@@ -1,154 +1,334 @@
-import os, time, yaml, datetime, threading
+from fastapi import FastAPI, Request
 from wxpusher import WxPusher
-from watchdog.observers import Observer
-from watchdog.events import *
-from watchdog.utils.dirsnapshot import DirectorySnapshot, DirectorySnapshotDiff
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import uvicorn
+import logging
+import shutil
+import yaml
+import os
 
-version = "1.2.3"
+# LAVEL: DEBUG INFO WARNING ERROR CRITICAL
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s [%(levelname)s]: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S'
+                    )
 
-if os.path.exists("config.yml"):
+version = "2.0.0"
+time_zone="Asia/Shanghai"
+
+# 创建 FastAPI 应用
+app = FastAPI()
+
+# 消息推送
+def pusher(content):
+    if not os.path.exists("config.yml"):
+        shutil.copy("config.example.yml", "config.yml")
+
     with open("config.yml", "r", encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-else:
-    input("Config file not exists, please create config.yml first!\nPress Enter to exit...")
-    exit("Config file not exists!")
 
-if config["version"] != version:
-    input("Config file version is not match, please check config.yml!\nPress Enter to exit...")
-    exit("Config file version is not match")
+    if config["pusher"]:
+        if config["AppToken"] == "" or config["TopicIds"] == [] or config["TopicIds"] == "":
+            print("AppToken or TopicIds not found, please check config.yml.")
+        else:
+            WxPusher.send_message(content=content, topic_ids=config["TopicIds"], token=config["AppToken"])
 
-if not config["debug"] in [True, False] or not config["pusher"] in [True, False]:
-    input("debug or pusher is not bool, please check config.yml!\nPress Enter to exit...")
-    exit("debug or pusher is not bool")
+# 空格定义，微信单行20个字符
+def format_msg(message):
+    return (message + ((19 - len(message)) * " ") + f"\n" if len(message) < 19 else message[:19] + f"\n")
 
-if config["watch_dir"] == "" or config["upload_dir"] == "" or config["file_suffix"] == "" or config["timer"] == 0:
-    input("Config is error, please check config.yml!\nPress Enter to exit...")
-    exit("config error")
 
-if config["cmd"] == "":
-    arg = input("未设定触发指令，是否继续运行？（Y/n）")
-    if arg == "n" or arg == "N":
-        exit("cmd is empty")
+# 时间数据清洗
+def format_time(date_str):
+    output_time = datetime.fromisoformat(date_str).astimezone(ZoneInfo(time_zone)).strftime("%Y-%m-%d %H:%M:%S") + time_zone
+    return output_time
 
-def pusher(message):
-    if config["appToken"] == "" or config["topic_ids"] == [] or config["topic_ids"] == "":
-        print("AppToken or topic_ids is empty, please check config.yml!")
-    else:
-        WxPusher.send_message(content=message, topic_ids=config["topic_ids"], token=config["appToken"])
 
-class FileEventHandler(FileSystemEventHandler):
-    second = 0
-    minute = 0
-    hour = 0
-    def __init__(self, aim_path):
-        FileSystemEventHandler.__init__(self)
-        self.aim_path = aim_path
-        self.timer = None
-        self.snapshot = DirectorySnapshot(self.aim_path)
+def notify_stream_startd(payload):
+    event_time = payload["EventTimestamp"] # 事件时间
+    room_id = payload["EventData"]["RoomId"] # 直播间号
+    name = payload["EventData"]["Name"] # 用户名
+    title = payload["EventData"]["Title"] # 直播间标题
+    area_name = payload["EventData"]["AreaNameParent"] + "-" + payload["EventData"]["AreaNameChild"] # 直播间分区
+    record_status = payload["EventData"]["Recording"] # brec录制设置状态
+    stream_status = payload["EventData"]["Streaming"] # 直播状态
+    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
 
-    def Timer(self):
-        if self.timer:
-            self.timer.cancel()
+    pusher(f"推流开始提醒 | Nya-WSL服务\n\n" + 
+            format_msg(str(room_id) + "-" + name) + 
+            format_msg(title) + 
+            f"\n\n" +
+            "====================\n" +
+            "直播推流信息\n" +
+            "====================\n" +
+            f"直播标题: {title}\n" +
+            f"直播间号: {room_id}\n" +
+            f"主播: {name}\n" +
+            f"分区: {area_name}\n" +
+            f"推流时间: {format_time(event_time)}\n" +
+            "====================\n\n\n" +
+            "====================\n" +
+            f"录播姬状态信息\n" +
+            "====================\n" +
+            f"录制状态: {record_status}\n" +
+            f"推流状态: {stream_status}\n" +
+            f"弹幕连接: {danmaku_status}\n" +
+            "====================\n\n\n" +
+            f"*************************\n" +
+            f"联系我们\n\n" +
+            f"mail: support@nya-wsl.com\n" +
+            f"QQ群: 2219140787\n"
+            f"*************************\n" +
+            "A Project of Nya-WSL.\n" +
+            "髙橋はるき & 狐日泽\n" +
+            "Copyright © 2024-2025.All Rights reserved."
+)
 
-        self.timer = threading.Timer(config["timer"], self.checkSnapshot)
-        self.timer.start()
-        FileEventHandler.second = 0
-        FileEventHandler.minute = 0
-        FileEventHandler.hour = 0
-        return self.timer
+def notify_stream_ended(payload):
+    event_time = payload["EventTimestamp"] # 事件时间
+    room_id = payload["EventData"]["RoomId"] # 直播间号
+    name = payload["EventData"]["Name"] # 用户名
+    title = payload["EventData"]["Title"] # 直播间标题
+    area_name = payload["EventData"]["AreaNameParent"] + "-" + payload["EventData"]["AreaNameChild"] # 直播间分区
+    record_status = payload["EventData"]["Recording"] # brec录制设置状态
+    stream_status = payload["EventData"]["Streaming"] # 直播状态
+    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
 
-    def cancel_timer(self):
-        self.Timer().cancel()
+    pusher(f"推流结束提醒 | Nya-WSL服务\n\n" + 
+            format_msg(str(room_id) + "-" + name) + 
+            format_msg(title) + 
+            f"\n\n" +
+            "====================\n" +
+            "直播推流信息\n" +
+            "====================\n" +
+            f"直播标题: {title}\n" +
+            f"直播间号: {room_id}\n" +
+            f"主播: {name}\n" +
+            f"分区: {area_name}\n" +
+            f"推流时间: {format_time(event_time)}\n" +
+            "====================\n\n\n" +
+            "====================\n" +
+            f"录播姬状态信息\n" +
+            "====================\n" +
+            f"录制状态: {record_status}\n" +
+            f"推流状态: {stream_status}\n" +
+            f"弹幕连接: {danmaku_status}\n" +
+            "====================\n\n\n" +
+            f"*************************\n" +
+            f"联系我们\n\n" +
+            f"mail: support@nya-wsl.com\n" +
+            f"QQ群: 2219140787\n"
+            f"*************************\n" +
+            "A Project of Nya-WSL.\n" +
+            "髙橋はるき & 狐日泽\n" +
+            "Copyright © 2024-2025. All Rights reserved."
+)
 
-    def on_any_event(self, event):
-        if self.Timer():
-            FileEventHandler.cancel_timer(self)
+def notify_session_started(payload):
+    event_time = payload["EventTimestamp"] # 事件时间
+    room_id = payload["EventData"]["RoomId"] # 直播间号
+    name = payload["EventData"]["Name"] # 用户名
+    title = payload["EventData"]["Title"] # 直播间标题
+    record_status = payload["EventData"]["Recording"] # brec录制设置状态
+    stream_status = payload["EventData"]["Streaming"] # 直播状态
+    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
 
-        FileEventHandler.Timer(self)
+    pusher(f"录制开始提醒 | Nya-WSL服务\n\n" + 
+            format_msg(str(room_id) + "-" + name) + 
+            format_msg(title) + 
+            f"\n\n" +
+            "====================\n" +
+            "直播录制信息\n" +
+            "====================\n" +
+            f"直播标题: {title}\n" +
+            f"直播间号: {room_id}\n" +
+            f"主播: {name}\n" +
+            f"录制开始时间: {format_time(event_time)}\n" +
+            "====================\n\n\n" +
+            "====================\n" +
+            f"录播姬状态信息\n" +
+            "====================\n" +
+            f"录制状态: {record_status}\n" +
+            f"推流状态: {stream_status}\n" +
+            f"弹幕连接: {danmaku_status}\n" +
+            "====================\n\n\n" +
+            f"*************************\n" +
+            f"联系我们\n\n" +
+            f"mail: support@nya-wsl.com\n" +
+            f"QQ群: 2219140787\n"
+            f"*************************\n" +
+            "A Project of Nya-WSL.\n" +
+            "髙橋はるき & 狐日泽\n" +
+            "Copyright © 2024-2025. All Rights reserved."
+)
 
-    def checkSnapshot(self):
-        snapshot = DirectorySnapshot(self.aim_path)
-        diff = DirectorySnapshotDiff(self.snapshot, snapshot)
-        self.snapshot = snapshot
-        self.timer = None
-        upload_status = False
-        file_list = []
-
-        # print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "计时器结束", sep=": ")
-        try:
-            FileEventHandler.cancel_timer(self)
-        except:
-            print("结束计时器出错！")
-        
-        moved_files = []
-        for moved_file in diff.files_moved:
-            moved_files.append(moved_file[-1])
-        diff_files = diff.files_modified + diff.files_created + moved_files
-        for file in diff_files:
-            for suffix in config["file_suffix"]:
-                if os.path.basename(file).endswith(suffix):
-                    upload_dir_old = os.path.split(file)[0].split(config["watch_dir"])[1].split("/")
-                    upload_dir = os.path.join(config["upload_dir"], upload_dir_old[0], upload_dir_old[2])
-                    if not os.path.exists(upload_dir):
-                        os.system(f"mkdir -p {upload_dir}")
-                    os.system(f'cp -rv "{file}" {upload_dir}/')
-                    log = f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {file} -> {upload_dir}\n"
-                    if config["debug"]:
-                        with open("debug.log", "a+", encoding="utf-8") as f:
-                            f.write(log)
-                    file_list.append(f'{file}')
-                    upload_status = True
-
-        if upload_status:
-            if config["pusher"]:
-                if config["debug"]:
-                    print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), file_list, sep=": ")
-                message = str(file_list).replace("[", "").replace("]", "").replace("'", "").replace(",", "\n==========\n").replace(config["watch_dir"] + upload_dir_old[0] + "/", "")
-                pusher(f"Nya-WSL BILIBILI Record Monitor:\n\n待上传文件：\n{message}\n\nBug Report：\nsupport@nya-wsl.com\nhttps://github.com/Nya-WSL/bili_rec_monitor")
-            os.system(config["cmd"])
-            if config["del_after_cmd"]:
-                os.system(f'rm -rfv {upload_dir}')
-            pusher(f"Nya-WSL BILIBILI Record Monitor:\n\n文件已上传，请注意云端文件是否正常\n\nBug Report：\nsupport@nya-wsl.com\nhttps://github.com/Nya-WSL/bili_rec_monitor")
-
-class DirMonitor(object):
-    """文件夹监视类"""
+def notify_session_ended(payload):
+    event_time = payload["EventTimestamp"] # 事件时间
+    room_id = payload["EventData"]["RoomId"] # 直播间号
+    name = payload["EventData"]["Name"] # 用户名
+    title = payload["EventData"]["Title"] # 直播间标题
+    record_status = payload["EventData"]["Recording"] # brec录制设置状态
+    stream_status = payload["EventData"]["Streaming"] # 直播状态
+    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
     
-    def __init__(self, aim_path):
-        """构造函数"""
-        self.aim_path= aim_path
-        self.observer = Observer()
-    
-    def start(self):
-        """启动"""
-        event_handler = FileEventHandler(self.aim_path)
-        self.observer.schedule(event_handler, self.aim_path, recursive=True)
-        self.observer.start()
-    
-    def stop(self):
-        """停止"""
-        self.observer.stop()
-    
-def bili_rec_monitor(path):
-    monitor = DirMonitor(path)
-    monitor.start()
-    try:
-        while True:
-            time.sleep(1)
+    pusher(f"录制结束提醒 | Nya-WSL服务\n\n" + 
+            format_msg(str(room_id) + "-" + name) + 
+            format_msg(title) + 
+            f"\n\n" +
+            "====================\n" +
+            "直播录制信息\n" +
+            "====================\n" +
+            f"直播标题: {title}\n" +
+            f"直播间号: {room_id}\n" +
+            f"主播: {name}\n" +
+            f"录制结束时间: {format_time(event_time)}\n" +
+            "====================\n\n\n" +
+            "====================\n" +
+            f"录播姬状态信息\n" +
+            "====================\n" +
+            f"录制状态: {record_status}\n" +
+            f"推流状态: {stream_status}\n" +
+            f"弹幕连接: {danmaku_status}\n" +
+            "====================\n\n\n" +
+            f"*************************\n" +
+            f"联系我们\n\n" +
+            f"mail: support@nya-wsl.com\n" +
+            f"QQ群: 2219140787\n"
+            f"*************************\n" +
+            "A Project of Nya-WSL.\n" +
+            "髙橋はるき & 狐日泽\n" +
+            "Copyright © 2024-2025. All Rights reserved."
+    )
 
-            if config["debug"]:
-                FileEventHandler.second += 1
+def notify_file_opening(payload):
+    event_time = payload["EventTimestamp"] # 事件时间
+    room_id = payload["EventData"]["RoomId"] # 直播间号
+    name = payload["EventData"]["Name"] # 用户名
+    title = payload["EventData"]["Title"] # 直播间标题
+    record_status = payload["EventData"]["Recording"] # brec录制设置状态
+    stream_status = payload["EventData"]["Streaming"] # 直播状态
+    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
+    relative_path = payload["EventData"]["RelativePath"] # 录制文件相对路径
+    file_open_time = payload["EventData"]["FileOpenTime"] # 文件打开时间
 
-                if FileEventHandler.second / 60 == 1:
-                    FileEventHandler.second = 0
-                    FileEventHandler.minute += 1
-                if FileEventHandler.minute / 60 == 1:
-                    FileEventHandler.second = 0
-                    FileEventHandler.minute = 0
-                    FileEventHandler.hour += 1
 
-                print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {FileEventHandler.hour}h:{FileEventHandler.minute}m:{FileEventHandler.second % 60}s")
+    pusher(f"文件打开提醒 | Nya-WSL服务\n\n" + 
+            format_msg(str(room_id) + "-" + name) + 
+            format_msg(title) + 
+            f"\n\n" +
+            "====================\n" +
+            "文件打开信息\n" +
+            "====================\n" +
+            f"直播标题: {title}\n" +
+            f"直播间号: {room_id}\n" +
+            f"主播: {name}\n" +
+            f"事件触发时间: {format_time(event_time)}\n" +
+            f"文件打开时间: {format_time(file_open_time)}\n"+
+            f"文件相对路径: {relative_path}\n" +
+            "====================\n\n\n" +
+            "====================\n" +
+            f"录播姬状态信息\n" +
+            "====================\n" +
+            f"录制状态: {record_status}\n" +
+            f"推流状态: {stream_status}\n" +
+            f"弹幕连接: {danmaku_status}\n" +
+            "====================\n\n\n" +
+            f"*************************\n" +
+            f"联系我们\n\n" +
+            f"mail: support@nya-wsl.com\n" +
+            f"QQ群: 2219140787\n"
+            f"*************************\n" +
+            "A Project of Nya-WSL.\n" +
+            "髙橋はるき & 狐日泽\n" +
+            "Copyright © 2024-2025. All Rights reserved."
+    )
 
-    except KeyboardInterrupt:
-        monitor.stop()
+def notify_file_closed(payload):
+    event_time = payload["EventTimestamp"] # 事件时间
+    room_id = payload["EventData"]["RoomId"] # 直播间号
+    name = payload["EventData"]["Name"] # 用户名
+    title = payload["EventData"]["Title"] # 直播间标题
+    record_status = payload["EventData"]["Recording"] # brec录制设置状态
+    stream_status = payload["EventData"]["Streaming"] # 直播状态
+    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
+    relative_path = payload["EventData"]["RelativePath"] # 录制文件相对路径
+    file_open_time = payload["EventData"]["FileOpenTime"] # 文件打开时间
+    file_close_time = payload["EventData"]["FileCloseTime"] # 文件关闭时间
+    file_size = '{:.2f}'.format(int(payload["EventData"]["FileSize"]) / 1048576) # 文件大小,GB
 
-bili_rec_monitor(config["watch_dir"])
+
+    pusher(f"文件关闭提醒 | Nya-WSL服务\n\n" + 
+            format_msg(str(room_id) + "-" + name) + 
+            format_msg(title) + 
+            f"\n\n" +
+            "====================\n" +
+            "文件关闭信息\n" +
+            "====================\n" +
+            f"直播标题: {title}\n" +
+            f"直播间号: {room_id}\n" +
+            f"主播: {name}\n" +
+            f"事件触发时间: {format_time(event_time)}\n" +
+            f"文件打开时间: {format_time(file_open_time)}\n"+
+            f"文件关闭时间: {format_time(file_close_time)}\n"+
+            f"文件大小: {file_size} M\n"
+            f"文件相对路径: {relative_path}\n" +
+            "====================\n\n\n" +
+            "====================\n" +
+            f"录播姬状态信息\n" +
+            "====================\n" +
+            f"录制状态: {record_status}\n" +
+            f"推流状态: {stream_status}\n" +
+            f"弹幕连接: {danmaku_status}\n" +
+            "====================\n\n\n" +
+            f"*************************\n" +
+            f"联系我们\n\n" +
+            f"mail: support@nya-wsl.com\n" +
+            f"QQ群: 2219140787\n"
+            f"*************************\n" +
+            "A Project of Nya-WSL.\n" +
+            "髙橋はるき & 狐日泽\n" +
+            "Copyright © 2024-2025. All Rights reserved."
+    )
+
+# 定义 Webhook 路由
+@app.post("/brec_hook")
+async def brec(request: Request):
+    if not os.path.exists("config.yml"):
+        shutil.copy("config.example.yml", "config.yml")
+
+    with open("config.yml", "r", encoding="utf-8") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+    # 获取请求体数据
+    payload = await request.json()
+    # 打印接收到的数据
+    # print("Received webhook data:", payload)
+
+    event_type = payload["EventType"] # 事件
+
+    if event_type == "StreamStarted":
+        if config["notice"]["StreamStarted"] == True:
+            notify_stream_startd(payload=payload)
+    elif event_type == "SessionStarted":
+        if config["notice"]["SessionStarted"] == True:
+            notify_session_started(payload=payload)
+    elif event_type == "FileOpening":
+        if config["notice"]["FileOpening"] == True:
+            notify_file_opening(payload=payload)
+    elif event_type == "FileClosed":
+        if config["notice"]["FileClosed"] == True:
+            notify_file_closed(payload=payload)
+    elif event_type == "SessionEnded":
+        if config["notice"]["SessionEnded"] == True:
+            notify_session_ended(payload=payload)
+    elif event_type == "StreamEnded":
+        if config["notice"]["StreamEnded"] == True:
+            notify_stream_ended(payload=payload)
+
+    # 返回响应
+    return {"status": "200", "message": "Webhook received"}
+
+# 运行应用
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9000)
