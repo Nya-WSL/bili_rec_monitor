@@ -10,3 +10,15 @@ notice:
   SessionEnded: true # 结束录制
   StreamStarted: true # 开始直播
   StreamEnded: true # 停止直播
+
+remote:
+  PullFile: true # 是否启用远程下载录播文件，录播姬与Monitor不在同一设备，但录播需归档在Monitor所在的设备上
+  FileType: [".cover.jpg",".xml",".flv"] # 需要下载的文件类型
+  RoomIds: [] # 直播间id列表
+  RemoteURL: "" # 录播姬web服务器地址
+  RemoteUser: "" # 录播姬web服务器用户名
+  RemotePassword: "" # 录播姬web服务器密码
+  OutputPath: "/opt/archive/" # 录播文件保存路径
+
+timer:
+  time: 300 # 倒计时时间
