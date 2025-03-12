@@ -1,17 +1,18 @@
 from wxpusher import WxPusher
 from fastapi import FastAPI, Request
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import pcs_auth # 百度云授权函数
+import logging
+import aiohttp
+import asyncio
 import uvicorn
 import yaml
 import json
-from datetime import datetime
-from zoneinfo import ZoneInfo
-import logging
-import requests
-import aiohttp
-import asyncio
+import pcs # 百度云上传函数
 import os
 
-# LAVEL: DEBUG INFO WARNING ERROR CRITICAL
+# LEVEL: DEBUG INFO WARNING ERROR CRITICAL
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s [%(levelname)s]: %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S'
@@ -45,7 +46,7 @@ class Timer:
         return self.is_start
 
 
-version = "2.0.0"
+version = "2.2.0"
 time_zone = "Asia/Shanghai"
 
 # 创建 FastAPI 应用
@@ -450,6 +451,37 @@ async def pull_remote_record(payload):
     )
     await download_file(url, user, password, output_file, payload)
 
+def get_pcs_auth():
+    with open("config.yml", "r", encoding="utf-8") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    access_token = pcs_auth.auth()
+    config["pcs"]["AccessToken"] = access_token
+    with open("config.yml", "w", encoding="utf-8") as f:
+        yaml.dump(config, f, indent=4, allow_unicode=True)
+
+def upload_pcs(path, file_path):
+    with open("config.yml", "r", encoding="utf-8") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    access_token = config["pcs"]["AccessToken"]
+    path = path
+    file_path = file_path
+    access_token, path, isdir, size, uploadid, block_list, rtype, file_path, paths=pcs.precreate(access_token, path, file_path)
+    pcs.upload(uploadid, path, file_path, access_token, paths)
+    pcs.create(access_token, path, isdir, size, uploadid, block_list, rtype)
+
+async def time_out_handler(payload):
+    with open("config.yml", "r", encoding="utf-8") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+    if config["remote"]["PullFile"]:
+        await pull_remote_record(payload)
+
+    if config["pcs"]["Enable"]:
+        if config["pcs"]["AccessToken"] == "":
+            get_pcs_auth()
+        file_path = payload["EventData"]["RelativePath"]
+        upload_pcs(config["pcs"]["PcsPath"] + file_path, file_path)
+
 # 定义 Webhook 路由
 @app.post("/brec_hook")
 async def brec(request: Request):
@@ -489,7 +521,7 @@ async def brec(request: Request):
         if config["notice"]["StreamEnded"] == True:
             notify_stream_ended(payload)
         if not timer.get_status():
-            timer.start(config["timer"]["time"], pull_remote_record(payload))
+            timer.start(config["timer"]["time"], time_out_handler(payload))
 
     # 返回响应
     return {"status": "200", "message": "Webhook received"}

@@ -22,3 +22,11 @@ remote:
 
 timer:
   time: 300 # 倒计时时间
+
+pcs:
+  Enable: true
+  ClientId: "" # 百度网盘开放平台应用AppKey
+  SecretKey: "" # 百度网盘开放平台应用SecretKey
+  AccessToken: "" # 百度网盘access_token，如果为空将尝试自动获取
+  RedirectUrl: "oob" # 百度网盘开放平台回调地址
+  PcsPath: "/bili_rec_monitor/" # 百度云保存路径
