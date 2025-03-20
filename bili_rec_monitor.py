@@ -324,7 +324,7 @@ async def download_file(url, username, password, output_file, payload):
     room_id = payload["EventData"]["RoomId"] # 直播间号
     name = payload["EventData"]["Name"] # 用户名
     title = payload["EventData"]["Title"] # 直播间标题
-    file_size = '{:.2f}'.format(payload["EventData"]["FileCloseTime"]/1048576) # 文件大小,GB
+    file_size = '{:.2f}'.format(payload["EventData"]["FileSize"]/1048576) # 文件大小,GB
     auth = aiohttp.BasicAuth(username, password)  # Basic 认证
     async with aiohttp.ClientSession(auth=auth) as session:
         async with session.get(url) as response:
@@ -391,7 +391,6 @@ def create_wait_list(payload):
     with open("config.yml", "r", encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     for file_type in config["remote"]["FileType"]:
-
         if not os.path.exists("wait_list.json"):
             with open("wait_list.json", "w", encoding="utf-8") as f:
                 json.dump([], f, ensure_ascii=False, indent=4)
@@ -404,7 +403,6 @@ def create_wait_list(payload):
             if not file in wait_list:
                 wait_list.append(file)
                 json.dump(wait_list, f, ensure_ascii=False, indent=4)
-        
 
 # 异步执行
 async def pull_remote_record(payload):
@@ -416,7 +414,7 @@ async def pull_remote_record(payload):
     url = wait_list
     user = config["remote"]["RemoteUser"]
     password = config["remote"]["RemotePassword"]
-    # output_file = config["remote"]["OutputPath"].strip("/") + "/"
+    output_file = config["remote"]["OutputPath"] + payload["EventData"]["RelativePath"]
 
     if not os.path.exists(config["remote"]["OutputPath"].strip("/") + "/" + "/".join(payload["EventData"]["RelativePath"].split("/", 2)[1:2]).split(".")[0]):
         os.mkdir(config["remote"]["OutputPath"].strip("/") + "/" + "/".join(payload["EventData"]["RelativePath"].split("/", 2)[1:2]).split(".")[0])
@@ -452,19 +450,31 @@ async def pull_remote_record(payload):
     await download_file(url, user, password, output_file, payload)
 
 def get_pcs_auth():
+    """
+    通过code模式获取百度网盘开放平台授权码，如成功获取将返回token，否则返回None
+    """
     with open("config.yml", "r", encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-    access_token = pcs_auth.auth()
-    config["pcs"]["AccessToken"] = access_token
-    with open("config.yml", "w", encoding="utf-8") as f:
-        yaml.dump(config, f, indent=4, allow_unicode=True)
+    if config["pcs"]["AccessToken"] == "":
+        try:
+            access_token = pcs_auth.auth()
+            config["pcs"]["AccessToken"] = access_token
+            with open("config.yml", "w", encoding="utf-8") as f:
+                yaml.dump(config, f, indent=4, allow_unicode=True)
+
+            return config["pcs"]["AccessToken"]
+        except:
+            return None
 
 def upload_pcs(path, file_path):
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-    access_token = config["pcs"]["AccessToken"]
+    access_token = get_pcs_auth()
     path = path
     file_path = file_path
+
+    if access_token == None:
+        logging.error("获取百度网盘授权失败")
+        return
+
     access_token, path, isdir, size, uploadid, block_list, rtype, file_path, paths=pcs.precreate(access_token, path, file_path)
     pcs.upload(uploadid, path, file_path, access_token, paths)
     pcs.create(access_token, path, isdir, size, uploadid, block_list, rtype)
@@ -477,8 +487,6 @@ async def time_out_handler(payload):
         await pull_remote_record(payload)
 
     if config["pcs"]["Enable"]:
-        if config["pcs"]["AccessToken"] == "":
-            get_pcs_auth()
         file_path = payload["EventData"]["RelativePath"]
         upload_pcs(config["pcs"]["PcsPath"] + file_path, file_path)
 

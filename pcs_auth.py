@@ -32,3 +32,7 @@ def auth():
     response = requests.get(auth_url).json()
 
     return response["access_token"]
+
+if __name__ == "__main__":
+    token = auth()
+    print(token)
