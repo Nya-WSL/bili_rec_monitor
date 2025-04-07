@@ -1,16 +1,13 @@
-from wxpusher import WxPusher
 from fastapi import FastAPI, Request
+from wxpusher import WxPusher
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pcs_auth # 百度云授权函数
 import logging
-import aiohttp
 import asyncio
 import uvicorn
 import yaml
-import json
 import pcs # 百度云上传函数
-import os
 
 # LEVEL: DEBUG INFO WARNING ERROR CRITICAL
 logging.basicConfig(level=logging.DEBUG,
@@ -45,9 +42,11 @@ class Timer:
     def get_status(self):
         return self.is_start
 
+with open("config.yaml", "r", encoding="utf-8") as f:
+    config = yaml.load(f, Loader=yaml.FullLoader)
 
-version = "2.2.0"
-time_zone = "Asia/Shanghai"
+version = "2.3.0"
+time_zone = config["notice"]["TimeZone"]
 
 # 创建 FastAPI 应用
 app = FastAPI()
@@ -320,135 +319,6 @@ def notify_file_closed(payload):
             "Copyright © 2024-2025. All Rights reserved."
     )
 
-async def download_file(url, username, password, output_file, payload):
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    file_size = '{:.2f}'.format(payload["EventData"]["FileSize"]/1048576) # 文件大小,GB
-    auth = aiohttp.BasicAuth(username, password)  # Basic 认证
-    async with aiohttp.ClientSession(auth=auth) as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                with open(output_file, "wb") as f:
-                    while True:
-                        chunk = await response.content.read(1024 * 1024)  # 每次读取 1MB
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                logging.info(f"Download successfully. Path to file: {output_file}.")
-                pusher(f"文件回传结束 | Nya-WSL服务\n\n" + 
-                        format_msg(str(room_id) + "-" + name) + 
-                        format_msg(title) + 
-                        f"\n\n" +
-                        "====================\n" +
-                        "文件回传结束信息\n" +
-                        "====================\n" +
-                        f"直播标题: {title}\n" +
-                        f"直播间号: {room_id}\n" +
-                        f"主播: {name}\n" +
-                        f"文件大小: {file_size} G\n" +
-                        f"文件回传状态: {response.status}" +
-                        f"文件远端链接: {url}\n" +
-                        f"文件回传位置: {output_file}\n" +
-                        "====================\n\n\n" +
-                        f"*************************\n" +
-                        f"联系我们\n\n" +
-                        f"mail: support@nya-wsl.com\n" +
-                        f"QQ群: 2219140787\n"
-                        f"*************************\n" +
-                        "A Project of Nya-WSL.\n" +
-                        "髙橋はるき & 狐日泽\n" +
-                        "Copyright © 2024-2025. All Rights reserved."
-                )
-            else:
-                logging.error(f"Download failed. Response code: {response.status}")
-                pusher(f"文件回传错误 | Nya-WSL服务\n\n" + 
-                        format_msg(str(room_id) + "-" + name) + 
-                        format_msg(title) + 
-                        f"\n\n" +
-                        "====================\n" +
-                        "文件回传错误信息\n" +
-                        "====================\n" +
-                        f"直播标题: {title}\n" +
-                        f"直播间号: {room_id}\n" +
-                        f"主播: {name}\n" +
-                        f"文件大小: {file_size} G\n" +
-                        f"文件回传状态: {response.status}" +
-                        f"文件远端链接: {url}\n" +
-                        f"文件回传位置: {output_file}\n" +
-                        "====================\n\n\n" +
-                        f"*************************\n" +
-                        f"联系我们\n\n" +
-                        f"mail: support@nya-wsl.com\n" +
-                        f"QQ群: 2219140787\n"
-                        f"*************************\n" +
-                        "A Project of Nya-WSL.\n" +
-                        "髙橋はるき & 狐日泽\n" +
-                        "Copyright © 2024-2025. All Rights reserved."
-                )
-
-def create_wait_list(payload):
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-    for file_type in config["remote"]["FileType"]:
-        if not os.path.exists("wait_list.json"):
-            with open("wait_list.json", "w", encoding="utf-8") as f:
-                json.dump([], f, ensure_ascii=False, indent=4)
-
-        with open("wait_list.json", "r", encoding="utf-8") as f:
-            wait_list = json.load(f)
-
-        with open("wait_list.json", "w", encoding="utf-8") as f:
-            file = "/".join(payload["EventData"]["RelativePath"].split("/", 2)[1:]).split(".")[0] + file_type
-            if not file in wait_list:
-                wait_list.append(file)
-                json.dump(wait_list, f, ensure_ascii=False, indent=4)
-
-# 异步执行
-async def pull_remote_record(payload):
-    with open("wait_list.json", "r", encoding="utf-8") as f:
-        wait_list = json.load(f)
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-
-    url = wait_list
-    user = config["remote"]["RemoteUser"]
-    password = config["remote"]["RemotePassword"]
-    output_file = config["remote"]["OutputPath"] + payload["EventData"]["RelativePath"]
-
-    if not os.path.exists(config["remote"]["OutputPath"].strip("/") + "/" + "/".join(payload["EventData"]["RelativePath"].split("/", 2)[1:2]).split(".")[0]):
-        os.mkdir(config["remote"]["OutputPath"].strip("/") + "/" + "/".join(payload["EventData"]["RelativePath"].split("/", 2)[1:2]).split(".")[0])
-
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    file_size = '{:.2f}'.format(payload["EventData"]["FileCloseTime"] / 1048576) # 文件大小,GB
-
-    pusher(f"文件回传开始 | Nya-WSL服务\n\n" + 
-            format_msg(str(room_id) + "-" + name) + 
-            format_msg(title) + 
-            f"\n\n" +
-            "====================\n" +
-            "文件回传开始信息\n" +
-            "====================\n" +
-            f"直播标题: {title}\n" +
-            f"直播间号: {room_id}\n" +
-            f"主播: {name}\n" +
-            f"文件大小: {file_size} G\n" +
-            f"文件远端链接: {url}\n" +
-            f"文件回传位置: {output_file}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025. All Rights reserved."
-    )
-    await download_file(url, user, password, output_file, payload)
-
 def get_pcs_auth():
     """
     通过code模式获取百度网盘开放平台授权码，如成功获取将返回token，否则返回None
@@ -457,14 +327,25 @@ def get_pcs_auth():
         config = yaml.load(f, Loader=yaml.FullLoader)
     if config["pcs"]["AccessToken"] == "":
         try:
+            if config["pcs"]["ClientId"] or config["pcs"]["SecretKey"] == "":
+                raise ValueError("未配置ClientId或SecretKey")
+
             access_token = pcs_auth.auth()
             config["pcs"]["AccessToken"] = access_token
+
             with open("config.yml", "w", encoding="utf-8") as f:
                 yaml.dump(config, f, indent=4, allow_unicode=True)
 
             return config["pcs"]["AccessToken"]
-        except:
+        except Exception as e:
+            logging.error(e)
             return None
+
+# 启用时检查百度云token
+if config["pcs"]["AccessToken"] == "":
+    access_token = get_pcs_auth()
+    if access_token == None:
+        logging.error("初始化百度网盘失败")
 
 def upload_pcs(path, file_path):
     access_token = get_pcs_auth()
@@ -483,9 +364,6 @@ async def time_out_handler(payload):
     with open("config.yml", "r", encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    if config["remote"]["PullFile"]:
-        await pull_remote_record(payload)
-
     if config["pcs"]["Enable"]:
         file_path = payload["EventData"]["RelativePath"]
         upload_pcs(config["pcs"]["PcsPath"] + file_path, file_path)
@@ -497,8 +375,8 @@ async def brec(request: Request):
         config = yaml.load(f, Loader=yaml.FullLoader)
     # 获取录播姬发送的hook数据
     payload = await request.json()
-    # # 打印接收到的数据
-    # print("Received webhook data:", payload)
+    # 接收到的数据归纳至debug日志
+    logging.debug(f"收到webhook数据: {payload}")
 
     event_type = payload["EventType"] # 事件
 
@@ -519,7 +397,6 @@ async def brec(request: Request):
     elif event_type == "FileClosed":
         if config["notice"]["FileClosed"] == True:
             notify_file_closed(payload)
-        create_wait_list(payload)
 
     elif event_type == "SessionEnded":
         if config["notice"]["SessionEnded"] == True:
@@ -536,4 +413,4 @@ async def brec(request: Request):
 
 # 运行应用
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=9000)
+    uvicorn.run(app, host=config["host"], port=config["port"])
