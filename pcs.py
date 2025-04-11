@@ -231,7 +231,9 @@ def create(access_token, path, isdir, size, uploadid, block_list, rtype, tmp_pat
             else:
                 logging.info(f"Uploaded: {api_response['path']} | Size:{api_response['size'] / 1048576} MB")
                 if tmp_path != None:
-                    if os.path.exists(tmp_path):
+                    try:
                         shutil.rmtree(tmp_path)
+                    except:
+                        logging.warning(f"删除 {tmp_path} 失败")
         except openapi_client.ApiException as e:
             logging.error("Exception when calling FileuploadApi -> xpanfilecreate: %s\n" % e)
