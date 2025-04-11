@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.DEBUG,
 """
 def split(fromfile, todir, chunksize = 4*1024*1024):
     if not os.path.exists(todir):  # check whether todir exists or not
-        os.mkdir(todir)
+        os.makedirs(todir)
     else:
         for fname in os.listdir(todir):
             os.remove(os.path.join(todir, fname))
@@ -128,6 +128,8 @@ def precreate(access_token, path, file_path):
             # file_diretory = os.path.dirname(file_path) #获取目录路径
             file_diretory = os.getcwd() #获取目录路径
             tmp_path = os.path.join(file_diretory, 'tmp') #临时文件目录
+            if not os.path.exists(tmp_path):
+                os.makedirs(tmp_path)
             split(file_path, tmp_path, chunksize)
             paths, md5s = get_files_md5(tmp_path)
             # print(md5s)
@@ -135,6 +137,7 @@ def precreate(access_token, path, file_path):
             block_list = list_as_string.replace("'", '"')  # str | 由MD5字符串组成的list
             # print(block_list)
         else:
+            tmp_path = None
             block_list = ''  # str | 由MD5字符串组成的list
             file_md5 = get_file_md5(file_path)
             block_list = block_list + '["{}"]' .format(file_md5)  #放入block_list
@@ -155,7 +158,7 @@ def precreate(access_token, path, file_path):
         except openapi_client.ApiException as e:
             logging.error("Exception when calling FileuploadApi -> xpanfileprecreate: %s\n" % e)
         # print(access_token, path, isdir, size, uploadid, block_list, rtype, file_path, paths)
-        return access_token, path, isdir, size, uploadid, block_list, rtype, file_path, paths
+        return access_token, path, isdir, size, uploadid, block_list, rtype, file_path, paths, tmp_path
 
 """
 2、上传
@@ -209,7 +212,7 @@ def upload(uploadid, path, file_path, access_token, paths):
 """
 3、创建文件
 """
-def create(access_token, path, isdir, size, uploadid, block_list, rtype):
+def create(access_token, path, isdir, size, uploadid, block_list, rtype, tmp_path):
     """
     create
     """
@@ -226,7 +229,9 @@ def create(access_token, path, isdir, size, uploadid, block_list, rtype):
             if api_response["errno"] != 0:
                 logging.error(api_response)
             else:
-                logging.info(f"Uploaded: {api_response['path']} | Size:{api_response['size'] / 1048576}MB")
-                shutil.rmtree("tmp")
+                logging.info(f"Uploaded: {api_response['path']} | Size:{api_response['size'] / 1048576} MB")
+                if tmp_path != None:
+                    if os.path.exists(tmp_path):
+                        shutil.rmtree(tmp_path)
         except openapi_client.ApiException as e:
             logging.error("Exception when calling FileuploadApi -> xpanfilecreate: %s\n" % e)
