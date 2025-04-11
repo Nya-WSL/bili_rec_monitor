@@ -478,7 +478,7 @@ def time_out_handler():
         for file in wait_list:
             try:
                 file_path = os.path.join(config["local"]["RecordPath"], file)
-                upload_pcs(os.path.join(config["pcs"]["PcsPath"], file), file_path)
+                upload_pcs(os.path.join(config["pcs"]["PcsPath"], file.split("/", 2)[1:]), file_path)
                 try:
                     wait_list.remove(file)
                 except Exception as e:
