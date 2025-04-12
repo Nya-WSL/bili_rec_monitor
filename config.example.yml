@@ -1,12 +1,35 @@
-pusher: true # 是否启用微信推送
-AppToken: "" # 推送平台应用token，https://wxpusher.zjiecode.com/admin/main/app/appToken
-TopicIds: [] # 推送平台主题id，https://wxpusher.zjiecode.com/admin/main/topics/list
+host: "127.0.0.1" # webhook地址，一般无需更改
+port: 9000 # webhook监听端口
+
+FileType: [".cover.jpg",".xml",".flv"] # 文件类型
+
+pusher:
+  enable: true # 是否启用微信推送
+  AppToken: "" # 推送平台应用token，https://wxpusher.zjiecode.com/admin/main/app/appToken
+  TopicIds: [] # 推送平台主题id，https://wxpusher.zjiecode.com/admin/main/topics/list
 
 # 通知类型
 notice:
+  TimeZone: "Asia/Shanghai" # 时区
   SessionStarted: true # 开始录制
   FileOpening: true # 开始写入录播文件
   FileClosed: true # 停止写入录播文件
   SessionEnded: true # 结束录制
   StreamStarted: true # 开始直播
   StreamEnded: true # 停止直播
+
+local:
+  enable: true
+  RecordPath: "/opt/RecordFiles" # 本地录制存储路径, 末尾需加“/”
+  OutputPath: "/opt/archive/" # 录播文件保存路径
+
+timer:
+  time: 300 # 倒计时时间
+
+pcs:
+  Enable: true
+  ClientId: "" # 百度网盘开放平台应用AppKey
+  SecretKey: "" # 百度网盘开放平台应用SecretKey
+  AccessToken: "" # 百度网盘access_token，如果为空将尝试自动获取
+  RedirectUrl: "oob" # 百度网盘开放平台回调地址
+  PcsPath: "/bili_rec_monitor/" # 百度云保存路径
