@@ -475,19 +475,18 @@ def time_out_handler():
     if config["pcs"]["Enable"]:
         with open("wait_list.json", "r", encoding="utf-8") as f:
             wait_list = json.load(f)
+        error_list = []
         for file in wait_list:
             try:
                 file_path = os.path.join(config["local"]["RecordPath"], file)
-                upload_pcs(os.path.join(config["pcs"]["PcsPath"], file), file_path)
-                try:
-                    wait_list.remove(file)
-                except Exception as e:
-                    logging.error(e)
+                upload_file = os.path.join(config["pcs"]["PcsPath"], "/".join(file.split("/", 2)[1:]))
+                upload_pcs(upload_file, file_path)
             except Exception as e:
+                error_list.append(file)
                 logging.error(f"{file} - 上传失败: {e}")
             finally:
                 with open("wait_list.json", "w+", encoding="utf-8") as f:
-                    json.dump(wait_list, f, ensure_ascii=False, indent=4)
+                    json.dump(error_list, f, ensure_ascii=False, indent=4)
         logging.info("已全部上传")
 
 # 定义 Webhook 路由
