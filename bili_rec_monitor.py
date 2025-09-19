@@ -380,8 +380,10 @@ def move_record_file(payload):
     with open("config.yml", "r", encoding="utf-8") as f:
         config = yaml.load(f)
 
-    record_file = "/" + config["local"]["RecordPath"] + payload["EventData"]["RelativePath"].split(".")[0]
-    output_file = "/" + config["local"]["OutputPath"].strip("/") + "/" + "/".join(payload["EventData"]["RelativePath"].split("/", 2)[1:2]).split(".")[0]
+    # record_file = "/" + config["local"]["RecordPath"] + payload["EventData"]["RelativePath"].split(".")[0]
+    record_file = os.path.join(config["local"]["RecordPath"], payload["EventData"]["RelativePath"].split(".")[0])
+    # output_file = "/" + config["local"]["OutputPath"].strip("/") + "/" + "/".join(payload["EventData"]["RelativePath"].split("/", 2)[1:2]).split(".")[0]
+    output_file = os.path.join(config["local"]["OutputPath"], payload["EventData"]["RelativePath"].split("/")[1])
 
     if not os.path.exists(output_file):
         os.makedirs(output_file)
