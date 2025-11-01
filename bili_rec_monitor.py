@@ -1,6 +1,5 @@
 from typing import Callable, Awaitable, Optional
 from fastapi import FastAPI, Request
-from wxpusher import WxPusher
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import ruamel.yaml as YAML
@@ -72,23 +71,13 @@ if not os.path.exists("config.yml"):
 with open("config.yml", "r", encoding="utf-8") as f:
     config = yaml.load(f)
 
-version = "2.4.0"
+version = "2.4.1"
 time_zone = config["notice"]["TimeZone"]
 
 # 创建 FastAPI 应用
 app = FastAPI()
 # 创建定时器
 timer = Timer()
-
-# 消息推送
-def pusher(content):
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f)
-    if config["pusher"]["enable"]:
-        if config["pusher"]["AppToken"] == "" or config["pusher"]["TopicIds"] == [] or config["pusher"]["TopicIds"] == "":
-            print("AppToken or TopicIds not found, please check config.yml.")
-        else:
-            WxPusher.send_message(content=content, topic_ids=config["pusher"]["TopicIds"], token=config["pusher"]["AppToken"])
 
 # 空格定义，微信单行20个字符
 def format_msg(message):
@@ -120,8 +109,8 @@ def notify_stream_startd(payload):
     record_status = payload["EventData"]["Recording"] # brec录制设置状态
     stream_status = payload["EventData"]["Streaming"] # 直播状态
     danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
-    
-    pusher(f"推流开始提醒 | Nya-WSL服务\n\n" + 
+
+    logging.info(f"\n推流开始提醒 | Nya-WSL服务\n\n" + 
             format_msg(str(room_id) + "-" + name) + 
             format_msg(title) + 
             f"\n\n" +
@@ -139,16 +128,7 @@ def notify_stream_startd(payload):
             "====================\n" +
             f"推流状态: {stream_status}\n" +
             f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025.All Rights reserved."
+            f"弹幕连接: {danmaku_status}\n"
     )
 
 def notify_stream_ended(payload):
@@ -161,7 +141,7 @@ def notify_stream_ended(payload):
     stream_status = payload["EventData"]["Streaming"] # 直播状态
     danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
     
-    pusher(f"推流结束提醒 | Nya-WSL服务\n\n" + 
+    logging.info(f"\n推流结束提醒 | Nya-WSL服务\n\n" + 
             format_msg(str(room_id) + "-" + name) + 
             format_msg(title) + 
             f"\n\n" +
@@ -179,16 +159,7 @@ def notify_stream_ended(payload):
             "====================\n" +
             f"推流状态: {stream_status}\n" +
             f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025. All Rights reserved."
+            f"弹幕连接: {danmaku_status}\n"
     )
 
 def notify_session_started(payload):
@@ -200,7 +171,7 @@ def notify_session_started(payload):
     stream_status = payload["EventData"]["Streaming"] # 直播状态
     danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
     
-    pusher(f"录制开始提醒 | Nya-WSL服务\n\n" + 
+    logging.info(f"\n录制开始提醒 | Nya-WSL服务\n\n" + 
             format_msg(str(room_id) + "-" + name) + 
             format_msg(title) + 
             f"\n\n" +
@@ -217,16 +188,7 @@ def notify_session_started(payload):
             "====================\n" +
             f"推流状态: {stream_status}\n" +
             f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025. All Rights reserved."
+            f"弹幕连接: {danmaku_status}\n"
     )
 
 def notify_session_ended(payload):
@@ -238,7 +200,7 @@ def notify_session_ended(payload):
     stream_status = payload["EventData"]["Streaming"] # 直播状态
     danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
     
-    pusher(f"录制结束提醒 | Nya-WSL服务\n\n" + 
+    logging.info(f"\n录制结束提醒 | Nya-WSL服务\n\n" + 
             format_msg(str(room_id) + "-" + name) + 
             format_msg(title) + 
             f"\n\n" +
@@ -255,16 +217,7 @@ def notify_session_ended(payload):
             "====================\n" +
             f"推流状态: {stream_status}\n" +
             f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025. All Rights reserved."
+            f"弹幕连接: {danmaku_status}\n"
     )
 
 def notify_file_opening(payload):
@@ -278,8 +231,7 @@ def notify_file_opening(payload):
     relative_path = payload["EventData"]["RelativePath"] # 录制文件相对路径
     file_open_time = payload["EventData"]["FileOpenTime"] # 文件打开时间
 
-
-    pusher(f"文件打开提醒 | Nya-WSL服务\n\n" + 
+    logging.info(f"\n文件打开提醒 | Nya-WSL服务\n\n" + 
             format_msg(str(room_id) + "-" + name) + 
             format_msg(title) + 
             f"\n\n" +
@@ -298,16 +250,7 @@ def notify_file_opening(payload):
             "====================\n" +
             f"推流状态: {stream_status}\n" +
             f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025. All Rights reserved."
+            f"弹幕连接: {danmaku_status}\n"
     )
 
 def notify_file_closed(payload):
@@ -323,8 +266,7 @@ def notify_file_closed(payload):
     file_close_time = payload["EventData"]["FileCloseTime"] # 文件打开时间
     file_size = '{:.2f}'.format(int(payload["EventData"]["FileSize"])/1048576) # 文件大小,MB
 
-
-    pusher(f"文件关闭提醒 | Nya-WSL服务\n\n" + 
+    logging.info(f"\n文件关闭提醒 | Nya-WSL服务\n\n" + 
             format_msg(str(room_id) + "-" + name) + 
             format_msg(title) + 
             f"\n\n" +
@@ -345,16 +287,7 @@ def notify_file_closed(payload):
             "====================\n" +
             f"推流状态: {stream_status}\n" +
             f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025. All Rights reserved."
+            f"弹幕连接: {danmaku_status}\n"
     )
 
 def create_wait_list(payload):
@@ -363,13 +296,13 @@ def create_wait_list(payload):
         config = yaml.load(f)
     for file_type in config["FileType"]:
         if not os.path.exists("wait_list.json"):
-            with open("wait_list.json", "w", encoding="utf-8") as f:
+            with open("wait_list.json", "w+", encoding="utf-8") as f:
                 json.dump([], f, ensure_ascii=False, indent=4)
 
         with open("wait_list.json", "r", encoding="utf-8") as f:
             wait_list = json.load(f)
 
-        with open("wait_list.json", "w", encoding="utf-8") as f:
+        with open("wait_list.json", "w+", encoding="utf-8") as f:
             file = "/".join(payload["EventData"]["RelativePath"].split("/", 2)).split(".")[0] + file_type
             if not file in wait_list:
                 wait_list.append(file)
@@ -393,7 +326,7 @@ def move_record_file(payload):
     title = payload["EventData"]["Title"] # 直播间标题
     file_size = '{:.2f}'.format(payload["EventData"]["FileSize"] / 1048576) # 文件大小,GB
 
-    pusher(f"文件转存开始 | Nya-WSL服务\n\n" + 
+    logging.info(f"\n文件转存开始 | Nya-WSL服务\n\n" + 
             format_msg(str(room_id) + "-" + name) + 
             format_msg(title) + 
             f"\n\n" +
@@ -406,16 +339,7 @@ def move_record_file(payload):
             f"文件大小: {file_size} G\n" +
             f"文件原始位置: {record_file}\n" +
             f"文件转存类型: {config['FileType']}\n" +
-            f"文件转存位置: {output_file}\n" +
-            "====================\n\n\n" +
-            f"*************************\n" +
-            f"联系我们\n\n" +
-            f"mail: support@nya-wsl.com\n" +
-            f"QQ群: 2219140787\n"
-            f"*************************\n" +
-            "A Project of Nya-WSL.\n" +
-            "髙橋はるき & 狐日泽\n" +
-            "Copyright © 2024-2025. All Rights reserved."
+            f"文件转存位置: {output_file}\n"
     )
 
     for file_type in config["FileType"]:
@@ -484,8 +408,10 @@ def time_out_handler():
                 upload_file = os.path.join(config["pcs"]["PcsPath"], "/".join(file.split("/", 2)[1:]))
                 upload_pcs(upload_file, file_path)
             except Exception as e:
+                import traceback
                 error_list.append(file)
                 logging.error(f"{file} - 上传失败: {e}")
+                logging.error(f"{file} - 上传失败: {traceback.format_exc()}")
             finally:
                 with open("wait_list.json", "w+", encoding="utf-8") as f:
                     json.dump(error_list, f, ensure_ascii=False, indent=4)

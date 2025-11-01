@@ -118,6 +118,7 @@ def precreate(access_token, path, file_path):
         isdir = 0  # int | isdir
         size = os.path.getsize(file_path) #获取上传文件大小
         autoinit = 1  # int | autoinit
+        uploadid = ''
 
         kilobytes = 1024
         megabytes = kilobytes * 1024
@@ -152,8 +153,9 @@ def precreate(access_token, path, file_path):
                 access_token, path, isdir, size, autoinit, block_list, rtype=rtype)
             # logging.info(api_response)
             if api_response['errno'] == -6:
-                logging.error("疑似access_token过期: %s" % api_response['errmsg'])
-            uploadid = api_response['uploadid'] #获取预上传返回的uploadid，传给upload和create函数
+                logging.error("疑似access_token过期: %s" % api_response)
+            else:
+                uploadid = api_response['uploadid'] #获取预上传返回的uploadid，传给upload和create函数
             # block_list_id = api_response['block_list']
         except openapi_client.ApiException as e:
             logging.error("Exception when calling FileuploadApi -> xpanfileprecreate: %s\n" % e)

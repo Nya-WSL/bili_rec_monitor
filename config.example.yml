@@ -3,11 +3,6 @@ port: 9000 # webhook监听端口
 
 FileType: [".cover.jpg",".xml",".flv"] # 文件类型
 
-pusher:
-  enable: true # 是否启用微信推送
-  AppToken: "" # 推送平台应用token，https://wxpusher.zjiecode.com/admin/main/app/appToken
-  TopicIds: [] # 推送平台主题id，https://wxpusher.zjiecode.com/admin/main/topics/list
-
 # 通知类型
 notice:
   TimeZone: "Asia/Shanghai" # 时区
