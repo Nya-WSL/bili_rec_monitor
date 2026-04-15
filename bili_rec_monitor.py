@@ -1,7 +1,9 @@
-from typing import Callable, Awaitable, Optional
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Callable, Awaitable, Optional, Dict, List
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
 import ruamel.yaml as YAML
 import pcs_auth # 百度云授权函数
 import logging
@@ -11,14 +13,26 @@ import shutil
 import json
 import pcs # 百度云上传函数
 import os
+import re
 
 # LEVEL: DEBUG INFO WARNING ERROR CRITICAL
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s]: %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S'
                     )
 
 yaml = YAML.YAML(typ="rt")
+
+if not os.path.exists("config.yml"):
+    shutil.copy("config.example.yml", "config.yml")
+
+with open("config.yml", "r", encoding="utf-8") as f:
+    config = yaml.load(f)
+
+time_zone = config["notice"]["TimeZone"]
+
+client_list = {}
+auth_list = []
 
 class Timer:
     def __init__(self):
@@ -65,19 +79,151 @@ class Timer:
         """是否正在运行"""
         return self._is_running
 
-if not os.path.exists("config.yml"):
-    shutil.copy("config.example.yml", "config.yml")
 
-with open("config.yml", "r", encoding="utf-8") as f:
-    config = yaml.load(f)
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.message_history: List[dict] = []
+        self.is_finished = False
 
-version = "2.4.1"
-time_zone = config["notice"]["TimeZone"]
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+        logging.info(f"Client {client_id} connected")
+        
+        # 发送连接成功消息
+        await self.send_personal_message({
+            "type": "connection_established",
+            "message": "Connected successfully",
+            "client_id": client_id,
+            "timestamp": datetime.now().isoformat()
+        }, client_id)
+
+    def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+            del client_list[client_id]
+            auth_list.remove(client_id)
+            logging.info(f"Client {client_id} disconnected")
+
+    async def send_personal_message(self, message: dict, client_id: str):
+        if client_id in self.active_connections:
+            try:
+                await self.active_connections[client_id].send_json(message)
+            except Exception as e:
+                logging.error(f"Error sending message to {client_id}: {e}")
+                self.disconnect(client_id)
+
+    async def broadcast(self, message: dict):
+        disconnected_clients = []
+        for client_id, connection in self.active_connections.items():
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logging.error(f"Error broadcasting to {client_id}: {e}")
+                disconnected_clients.append(client_id)
+        
+        for client_id in disconnected_clients:
+            self.disconnect(client_id)
+
+    async def handle_message(self, client_id: str, data: dict):
+        """处理客户端消息"""
+        message_type = data.get("type", "unknown")
+        
+        if message_type == "ping":
+            # 响应ping消息
+            response = {
+                "type": "pong",
+                "timestamp": datetime.now().isoformat(),
+                "original_message": data.get("message", "")
+            }
+            # logging.debug(f"Received ping from {client_id}: {data.get('message', '')}")
+            await self.send_personal_message(response, client_id)
+            # logging.debug(f"Sent pong to {client_id}: {response}")
+        
+        elif message_type == "chat":
+            # 处理聊天消息
+            chat_message = {
+                "type": "chat_message",
+                "from": client_id,
+                "message": data.get("message", ""),
+                "timestamp": datetime.now().isoformat()
+            }
+            self.message_history.append(chat_message)
+            # 广播给所有客户端
+            await self.broadcast(chat_message)
+        
+        elif message_type == "get_history":
+            # 发送消息历史
+            history_response = {
+                "type": "message_history",
+                "history": self.message_history[-10:],  # 最后10条消息
+                "timestamp": datetime.now().isoformat()
+            }
+            await self.send_personal_message(history_response, client_id)
+        
+        elif message_type == "auth":
+            token = config.get("ws_token", "")
+            auth = data.get("token", "")
+            if auth != "" or token != "":
+                if auth == token:
+                    response = {
+                        "type": "auth",
+                        "timestamp": datetime.now().isoformat(),
+                        "code": "200"
+                    }
+                    await self.send_personal_message(response, client_id)
+                    auth_list.append(client_id)
+                else:
+                    response = {
+                        "type": "auth",
+                        "timestamp": datetime.now().isoformat(),
+                        "code": "403"
+                    }
+                    await self.send_personal_message(response, client_id)
+                    self.disconnect(client_id)
+                    return
+            else:
+                response = {
+                    "type": "auth",
+                    "timestamp": datetime.now().isoformat(),
+                    "code": "403"
+                }
+                await self.send_personal_message(response, client_id)
+                self.disconnect(client_id)
+                return
+        
+        elif message_type == "register":
+            if client_id in auth_list:
+                client_list[client_id] = data["room_id"]
+                response = {
+                    "type": "register",
+                    "timestamp": datetime.now().isoformat(),
+                    "room_id": client_list.get(client_id, [])
+                }
+                await self.send_personal_message(response, client_id)
+        
+        elif message_type == "finish":
+            self.is_finished = True
 
 # 创建 FastAPI 应用
 app = FastAPI()
+
+# 添加CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # 创建定时器
 timer = Timer()
+
+# 创建连接管理器
+manager = ConnectionManager()
+
 
 # 空格定义，微信单行20个字符
 def format_msg(message):
@@ -394,11 +540,45 @@ def upload_pcs(path, file_path):
     pcs.upload(uploadid, path, file_path, access_token, paths)
     pcs.create(access_token, path, isdir, size, uploadid, block_list, rtype, tmp_path)
 
-def time_out_handler():
+async def time_out_handler():
     with open("config.yml", "r", encoding="utf-8") as f:
         config = yaml.load(f)
+    with open("wait_list.json", "r", encoding="utf-8") as f:
+        wait_list = json.load(f)
 
+    if config["ws"]:
+        if manager.active_connections != {}:
+            logging.info("开始通知客户端下载录制文件")
+            for client, room_ids in client_list.items():
+                if client_list == {}:
+                    logging.info("无在线客户端，跳过通知")
+                    break
+                files = []
+                path = ""
+                for room_id in room_ids:
+                    for i in wait_list:
+                        if re.search(room_id, i):
+                            file = config.get("download_url", "http://localhost/") + i
+                            files.append(file)
+                            path = i.split("/")[1]
+                    message = {
+                        "type": "record_end",
+                        "timestamp": datetime.now().isoformat(),
+                        "files": files,
+                        "path": path
+                    }
+                    await manager.send_personal_message(message, client)
+                    logging.info(f"已通知客户端 {client} 下载 {room_id} 文件数: {len(files)}, files: {files}")
+
+                    while not manager.is_finished:
+                        await asyncio.sleep(1)
+                    else:
+                        manager.is_finished = False
+    start_pcs()
+
+def start_pcs():
     if config["pcs"]["Enable"]:
+        logging.info("开始上传文件到百度网盘")
         with open("wait_list.json", "r", encoding="utf-8") as f:
             wait_list = json.load(f)
         error_list = []
@@ -416,6 +596,45 @@ def time_out_handler():
                 with open("wait_list.json", "w+", encoding="utf-8") as f:
                     json.dump(error_list, f, ensure_ascii=False, indent=4)
         logging.info("已全部上传")
+    else:
+        logging.info("未启用百度网盘上传，跳过上传步骤")
+
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await manager.connect(websocket, client_id)
+    try:
+        while True:
+            # 接收消息
+            data = await websocket.receive_json()
+            try:
+                await manager.handle_message(client_id, data)
+            except json.JSONDecodeError:
+                error_response = {
+                    "type": "error",
+                    "message": "Invalid JSON format",
+                    "timestamp": datetime.now().isoformat()
+                }
+                await manager.send_personal_message(error_response, client_id)
+    
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+        logging.info(f"Client {client_id} disconnected normally")
+    except Exception as e:
+        manager.disconnect(client_id)
+        logging.error(f"Client {client_id} connection error: {e}")
+
+@app.get("/")
+async def root():
+    return {"message": "WebSocket Server is running", "status": "healthy"}
+
+@app.get("/status")
+async def status():
+    return {
+        "active_connections": len(manager.active_connections),
+        "message_history_count": len(manager.message_history),
+        "status": "running"
+    }
 
 # 定义 Webhook 路由
 @app.post("/brec_hook")
@@ -424,8 +643,8 @@ async def brec(request: Request):
         config = yaml.load(f)
     # 获取录播姬发送的hook数据
     payload = await request.json()
-    # 接收到的数据归纳至debug日志
-    logging.debug(f"收到webhook数据: {payload}")
+    # 接收到的数据归纳至info日志
+    logging.info(f"收到webhook数据: {payload}")
 
     event_type = payload["EventType"] # 事件
 

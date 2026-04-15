@@ -161,3 +161,4 @@ cython_debug/
 config.yml
 /test
 test*.*
+client.yml

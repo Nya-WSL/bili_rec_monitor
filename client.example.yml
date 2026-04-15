@@ -1,0 +1,7 @@
+host: "your_server_ip" # ws服务器地址
+port: 9000 # ws端口
+token: "" # ws连接认证token
+user: "" # 录播姬基本认证用户名，未设置则留空
+password: "" # 录播姬基本认证密码，未设置则留空
+room_id: [""] # 需注册的房间号
+save_path: "/opt/bili_rec_monitor/RecordFiles"

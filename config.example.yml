@@ -1,5 +1,8 @@
-host: "127.0.0.1" # webhook地址，一般无需更改
+host: "127.0.0.1" # webhook地址，如果启用ws，一般为0.0.0.0
 port: 9000 # webhook监听端口
+ws: false # 是否启用ws
+ws_token: "" # ws连接认证token
+download_url: "http://ip:port/"
 
 FileType: [".cover.jpg",".xml",".flv"] # 文件类型
 
