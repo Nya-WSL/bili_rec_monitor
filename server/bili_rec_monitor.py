@@ -12,7 +12,6 @@ import uvicorn
 import shutil
 import json
 import pcs # 百度云上传函数
-import sys
 import os
 import re
 

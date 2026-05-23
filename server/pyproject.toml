@@ -17,7 +17,7 @@ dependencies = [
     "tzdata>=2025.2,<2026",
     "py-dateutil>=2.2,<3",
     "websockets>=15.0.1,<16",
-    "aiofiles>=25.1.0",
+    "requests>=2.32.5",
 ]
 
 [tool.uv]
