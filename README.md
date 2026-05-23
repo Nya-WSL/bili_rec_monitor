@@ -1,6 +1,6 @@
 # BILIBILI Record Monitor
 
-![python](https://img.shields.io/badge/Version-2.5.0-cyan) ![python](https://img.shields.io/badge/Python->=3.9,<3.14-blue) ![os](https://img.shields.io/badge/OS-Linux|MacOS-orange)
+![python](https://img.shields.io/badge/Version-2.7.0-cyan) ![python](https://img.shields.io/badge/Python->=3.9,<3.14-blue) ![os](https://img.shields.io/badge/OS-Linux|MacOS-orange)
 
 基于 BililiveRecorder 和 FastAPI 的BILIBILI录播文件监视器，用于监视B站直播状态并上传至百度网盘。
 

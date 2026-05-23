@@ -4,8 +4,10 @@ import asyncio
 import json
 import logging
 import aiohttp
+import aiofiles
 import traceback
 import uuid
+import os
 import ruamel.yaml as YAML
 
 from datetime import datetime
@@ -127,9 +129,7 @@ class WebSocketClient:
         elif message_type == "record_end":
             dl_manager = DownloadManager()
             await dl_manager.cmd(
-                message.get("files", []),
-                f'{config["save_path"]}/{message.get("path", "")}',
-                5,
+                message.get("files", [])
             )
 
         else:
@@ -256,29 +256,36 @@ class DownloadManager:
                         await session.close()
                         return False
 
-                    with open(save_path, "wb") as f:
+                    file_path = save_path
+                    save_path = "/".join(file_path.split("/")[:-1])
+                    if not os.path.exists(save_path):
+                        os.makedirs(save_path)
+
+                    async with aiofiles.open(file_path, "wb") as f:
                         logger.info(f"开始下载: {file}")
                         while True:
                             chunk = await response.content.read(1024)
+
                             if not chunk:
                                 await asyncio.sleep(1)  # 确保文件完全写入
                                 break
-                            f.write(chunk)
+                            await f.write(chunk)
+
         except Exception:
             logger.error(f"下载异常: {file}, 错误: {traceback.format_exc()}")
             return False
         logger.info(f"下载完成: {file}")
         return True
 
-    async def cmd(self, files, save_path, max_concurrent=5):
+    async def cmd(self, files, max_concurrent=5):
         """并发下载多个文件"""
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def bounded_download(url):
+        async def bounded_download(url, save_path):
             async with semaphore:
                 return await self.download_file(url, save_path)
 
-        tasks = [bounded_download(url) for url in files]
+        tasks = [bounded_download(url, f'{config["save_path"]}/{path}') for url, path in files.items()]
         results = await asyncio.gather(*tasks)
 
         successful = sum(results)

@@ -12,6 +12,7 @@ import uvicorn
 import shutil
 import json
 import pcs # 百度云上传函数
+import sys
 import os
 import re
 
@@ -46,10 +47,7 @@ class Timer:
             await asyncio.sleep(delay) # 等待倒计时结束
             if not self._canceled: # 检查是否被取消
                 logging.info("计时结束，执行回调")
-                if asyncio.iscoroutinefunction(callback):
-                    await callback() # 协程回调
-                else:
-                    callback() # 普通回调
+                await callback() # 协程回调
         finally:
             self._is_running = False
 
@@ -246,196 +244,6 @@ def format_time(date_str):
     output_time = dt.astimezone(ZoneInfo(time_zone)).strftime("%Y-%m-%d %H:%M:%S") + " | " + time_zone
     return output_time
 
-def notify_stream_startd(payload):
-    event_time = payload["EventTimestamp"] # 事件时间
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    area_name = payload["EventData"]["AreaNameParent"] + "-" + payload["EventData"]["AreaNameChild"] # 直播间分区
-    record_status = payload["EventData"]["Recording"] # brec录制设置状态
-    stream_status = payload["EventData"]["Streaming"] # 直播状态
-    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
-
-    logging.info(f"\n推流开始提醒 | Nya-WSL服务\n\n" + 
-            format_msg(str(room_id) + "-" + name) + 
-            format_msg(title) + 
-            f"\n\n" +
-            "====================\n" +
-            "直播推流信息\n" +
-            "====================\n" +
-            f"直播标题: {title}\n" +
-            f"直播间号: {room_id}\n" +
-            f"主播: {name}\n" +
-            f"分区: {area_name}\n" +
-            f"推流时间: {format_time(event_time)}\n" +
-            "====================\n\n\n" +
-            "====================\n" +
-            f"录播姬状态信息\n" +
-            "====================\n" +
-            f"推流状态: {stream_status}\n" +
-            f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n"
-    )
-
-def notify_stream_ended(payload):
-    event_time = payload["EventTimestamp"] # 事件时间
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    area_name = payload["EventData"]["AreaNameParent"] + "-" + payload["EventData"]["AreaNameChild"] # 直播间分区
-    record_status = payload["EventData"]["Recording"] # brec录制设置状态
-    stream_status = payload["EventData"]["Streaming"] # 直播状态
-    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
-    
-    logging.info(f"\n推流结束提醒 | Nya-WSL服务\n\n" + 
-            format_msg(str(room_id) + "-" + name) + 
-            format_msg(title) + 
-            f"\n\n" +
-            "====================\n" +
-            "直播推流信息\n" +
-            "====================\n" +
-            f"直播标题: {title}\n" +
-            f"直播间号: {room_id}\n" +
-            f"主播: {name}\n" +
-            f"分区: {area_name}\n" +
-            f"推流时间: {format_time(event_time)}\n" +
-            "====================\n\n\n" +
-            "====================\n" +
-            f"录播姬状态信息\n" +
-            "====================\n" +
-            f"推流状态: {stream_status}\n" +
-            f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n"
-    )
-
-def notify_session_started(payload):
-    event_time = payload["EventTimestamp"] # 事件时间
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    record_status = payload["EventData"]["Recording"] # brec录制设置状态
-    stream_status = payload["EventData"]["Streaming"] # 直播状态
-    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
-    
-    logging.info(f"\n录制开始提醒 | Nya-WSL服务\n\n" + 
-            format_msg(str(room_id) + "-" + name) + 
-            format_msg(title) + 
-            f"\n\n" +
-            "====================\n" +
-            "直播录制信息\n" +
-            "====================\n" +
-            f"直播标题: {title}\n" +
-            f"直播间号: {room_id}\n" +
-            f"主播: {name}\n" +
-            f"录制开始时间: {format_time(event_time)}\n" +
-            "====================\n\n\n" +
-            "====================\n" +
-            f"录播姬状态信息\n" +
-            "====================\n" +
-            f"推流状态: {stream_status}\n" +
-            f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n"
-    )
-
-def notify_session_ended(payload):
-    event_time = payload["EventTimestamp"] # 事件时间
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    record_status = payload["EventData"]["Recording"] # brec录制设置状态
-    stream_status = payload["EventData"]["Streaming"] # 直播状态
-    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
-    
-    logging.info(f"\n录制结束提醒 | Nya-WSL服务\n\n" + 
-            format_msg(str(room_id) + "-" + name) + 
-            format_msg(title) + 
-            f"\n\n" +
-            "====================\n" +
-            "直播录制信息\n" +
-            "====================\n" +
-            f"直播标题: {title}\n" +
-            f"直播间号: {room_id}\n" +
-            f"主播: {name}\n" +
-            f"录制结束时间: {format_time(event_time)}\n" +
-            "====================\n\n\n" +
-            "====================\n" +
-            f"录播姬状态信息\n" +
-            "====================\n" +
-            f"推流状态: {stream_status}\n" +
-            f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n"
-    )
-
-def notify_file_opening(payload):
-    event_time = payload["EventTimestamp"] # 事件时间
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    record_status = payload["EventData"]["Recording"] # brec录制设置状态
-    stream_status = payload["EventData"]["Streaming"] # 直播状态
-    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
-    relative_path = payload["EventData"]["RelativePath"] # 录制文件相对路径
-    file_open_time = payload["EventData"]["FileOpenTime"] # 文件打开时间
-
-    logging.info(f"\n文件打开提醒 | Nya-WSL服务\n\n" + 
-            format_msg(str(room_id) + "-" + name) + 
-            format_msg(title) + 
-            f"\n\n" +
-            "====================\n" +
-            "文件打开信息\n" +
-            "====================\n" +
-            f"直播标题: {title}\n" +
-            f"直播间号: {room_id}\n" +
-            f"主播: {name}\n" +
-            f"事件触发时间: {format_time(event_time)}\n" +
-            f"文件打开时间: {format_time(file_open_time)}\n"+
-            f"文件相对路径: {relative_path}\n" +
-            "====================\n\n\n" +
-            "====================\n" +
-            f"录播姬状态信息\n" +
-            "====================\n" +
-            f"推流状态: {stream_status}\n" +
-            f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n"
-    )
-
-def notify_file_closed(payload):
-    event_time = payload["EventTimestamp"] # 事件时间
-    room_id = payload["EventData"]["RoomId"] # 直播间号
-    name = payload["EventData"]["Name"] # 用户名
-    title = payload["EventData"]["Title"] # 直播间标题
-    record_status = payload["EventData"]["Recording"] # brec录制设置状态
-    stream_status = payload["EventData"]["Streaming"] # 直播状态
-    danmaku_status = payload["EventData"]["DanmakuConnected"] # 弹幕姬连接状态
-    relative_path = payload["EventData"]["RelativePath"] # 录制文件相对路径
-    file_open_time = payload["EventData"]["FileOpenTime"] # 文件打开时间
-    file_close_time = payload["EventData"]["FileCloseTime"] # 文件打开时间
-    file_size = '{:.2f}'.format(int(payload["EventData"]["FileSize"])/1048576) # 文件大小,MB
-
-    logging.info(f"\n文件关闭提醒 | Nya-WSL服务\n\n" + 
-            format_msg(str(room_id) + "-" + name) + 
-            format_msg(title) + 
-            f"\n\n" +
-            "====================\n" +
-            "文件关闭信息\n" +
-            "====================\n" +
-            f"直播标题: {title}\n" +
-            f"直播间号: {room_id}\n" +
-            f"主播: {name}\n" +
-            f"事件触发时间: {format_time(event_time)}\n" +
-            f"文件打开时间: {format_time(file_open_time)}\n"+
-            f"文件关闭时间: {format_time(file_close_time)}\n"+
-            f"文件大小: {file_size} MB\n"
-            f"文件相对路径: {relative_path}\n" +
-            "====================\n\n\n" +
-            "====================\n" +
-            f"录播姬状态信息\n" +
-            "====================\n" +
-            f"推流状态: {stream_status}\n" +
-            f"录制状态: {record_status}\n" +
-            f"弹幕连接: {danmaku_status}\n"
-    )
-
 def create_wait_list(payload):
     logging.info("写入wait_list")
     with open("config.yml", "r", encoding="utf-8") as f:
@@ -553,19 +361,16 @@ async def time_out_handler():
                 if client_list == {}:
                     logging.info("无在线客户端，跳过通知")
                     break
-                files = []
-                path = ""
+                files = {}
                 for room_id in room_ids:
                     for i in wait_list:
                         if re.search(room_id, i):
                             file = config.get("download_url", "http://localhost/") + i
-                            files.append(file)
-                            path = i.split("/")[1]
+                            files[file] = "/".join(i.split("/", 2)[1:])
                     message = {
                         "type": "record_end",
                         "timestamp": datetime.now().isoformat(),
-                        "files": files,
-                        "path": path
+                        "files": files
                     }
                     await manager.send_personal_message(message, client)
                     logging.info(f"已通知客户端 {client} 下载 {room_id} 文件数: {len(files)}, files: {files}")
@@ -650,41 +455,27 @@ async def brec(request: Request):
 
     if event_type == "StreamStarted":
         logging.info(f'{payload["EventData"]["RoomId"]} 开始直播')
-        if config["notice"]["StreamStarted"] == True:
-            notify_stream_startd(payload)
         if timer.is_running:
             timer.cancel()
 
     elif event_type == "SessionStarted":
         logging.info(f'{payload["EventData"]["RoomId"]} 开始推流')
-        if config["notice"]["SessionStarted"] == True:
-            notify_session_started(payload)
 
     elif event_type == "FileOpening":
         logging.info(f'{payload["EventData"]["RoomId"]} 打开文件')
-        if config["notice"]["FileOpening"] == True:
-            notify_file_opening(payload)
 
         create_wait_list(payload)
 
     elif event_type == "FileClosed":
         logging.info(f'{payload["EventData"]["RoomId"]} 关闭文件')
-        if config["notice"]["FileClosed"] == True:
-            notify_file_closed(payload)
-
         if config["local"]["enable"]:
             move_record_file(payload)
 
     elif event_type == "SessionEnded":
         logging.info(f'{payload["EventData"]["RoomId"]} 关闭推流')
-        if config["notice"]["SessionEnded"] == True:
-            notify_session_ended(payload)
 
     elif event_type == "StreamEnded":
         logging.info(f'{payload["EventData"]["RoomId"]} 结束直播')
-        if config["notice"]["StreamEnded"] == True:
-            notify_stream_ended(payload)
-
         await timer.start(config["timer"]["time"], time_out_handler) # 将回调函数作为参数传递，如果加()将会在倒计时开始前执行
 
     # 返回响应
