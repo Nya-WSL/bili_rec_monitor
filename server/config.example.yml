@@ -1,17 +1,10 @@
-host: "127.0.0.1" # webhook地址，一般无需更改
+host: "127.0.0.1" # webhook地址，如果启用ws，一般为0.0.0.0
 port: 9000 # webhook监听端口
+ws: false # 是否启用ws
+ws_token: "" # ws连接认证token
+download_url: "http://ip:port/"
 
-FileType: [".cover.jpg",".xml",".flv"] # 文件类型
-
-# 通知类型
-notice:
-  TimeZone: "Asia/Shanghai" # 时区
-  SessionStarted: true # 开始录制
-  FileOpening: true # 开始写入录播文件
-  FileClosed: true # 停止写入录播文件
-  SessionEnded: true # 结束录制
-  StreamStarted: true # 开始直播
-  StreamEnded: true # 停止直播
+FileType: [ ".cover.jpg", ".xml", ".flv" ] # 文件类型
 
 local:
   enable: true
