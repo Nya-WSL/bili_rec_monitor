@@ -2,7 +2,6 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Callable, Awaitable, Optional, Dict, List
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import ruamel.yaml as YAML
 import pcs_auth # 百度云授权函数
@@ -28,8 +27,6 @@ if not os.path.exists("config.yml"):
 
 with open("config.yml", "r", encoding="utf-8") as f:
     config = yaml.load(f)
-
-time_zone = config["notice"]["TimeZone"]
 
 client_list = {}
 auth_list = []
@@ -225,23 +222,6 @@ manager = ConnectionManager()
 # 空格定义，微信单行20个字符
 def format_msg(message):
     return (message + ((19 - len(message)) * " ") + f"\n" if len(message) < 19 else message[:19] + f"\n")
-
-# 时间数据清洗
-def format_time(date_str):
-    if '.' in date_str:
-        main_part, tz_part = date_str.split('+') if '+' in date_str else (date_str.split('-') if '-' in date_str else (date_str, ''))
-        date_part, microsecond = main_part.split('.')
-        microsecond = microsecond[:6].ljust(6, '0')  # 确保6位，不足补零
-        standardized_str = f"{date_part}.{microsecond}+{tz_part}" if tz_part else f"{date_part}.{microsecond}"
-    else:
-        standardized_str = date_str
-
-    # 解析时间（兼容Python 3.7+）
-    dt = datetime.strptime(standardized_str, '%Y-%m-%dT%H:%M:%S.%f%z')
-
-    # 转换为目标时区
-    output_time = dt.astimezone(ZoneInfo(time_zone)).strftime("%Y-%m-%d %H:%M:%S") + " | " + time_zone
-    return output_time
 
 def create_wait_list(payload):
     logging.info("写入wait_list")
