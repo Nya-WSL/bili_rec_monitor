@@ -8,6 +8,8 @@ import aiofiles
 import traceback
 import uuid
 import os
+import random
+import time
 import ruamel.yaml as YAML
 
 from datetime import datetime
@@ -32,10 +34,21 @@ class WebSocketClient:
         self.server_url = f'ws://{config["host"]}:{config["port"]}/ws/{self.client_id}'
         self.ws_connection = None
         self.is_connected = False
-        self.reconnect_delay = 1  # 初始重连延迟（秒）
-        self.max_reconnect_delay = 60  # 最大重连延迟
+        self._receive_task = None
+        self._connected_at = 0.0
+
+        # 重连相关配置（均可在 client.yml 的 reconnect 段中覆盖）
+        reconnect_cfg = config.get("reconnect") or {}
+        self.initial_reconnect_delay = float(reconnect_cfg.get("initial_delay", 1))  # 初始重连延迟（秒）
+        self.reconnect_delay = self.initial_reconnect_delay
+        self.max_reconnect_delay = float(reconnect_cfg.get("max_delay", 300))  # 最大重连延迟
+        self.backoff_factor = float(reconnect_cfg.get("backoff_factor", 1.5))  # 退避倍数
+        # 0 表示无限重连；用尽后不会停止，而是转为 max_delay 间隔的保活重试
+        self.max_reconnect_attempts = int(reconnect_cfg.get("max_attempts", 0))
+        # 连接稳定维持超过该时长（秒）后，重置退避延迟与重试计数
+        self.stable_connection_time = float(reconnect_cfg.get("stable_time", 60))
+        self.open_timeout = float(reconnect_cfg.get("open_timeout", 15))  # 握手超时
         self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 10  # 最大重连次数（0表示无限重连）
         self.should_reconnect = True
         self.ping_interval = 30  # 发送ping间隔（秒）
 
@@ -44,22 +57,48 @@ class WebSocketClient:
         url = self.server_url
         logger.info(f"Connecting to {url}")
 
+        # 清理上一次连接残留
+        await self._close_connection()
+
         try:
             self.ws_connection = await websockets.connect(
                 url,
                 ping_interval=None,  # 禁用自动ping/pong，我们自己处理
                 ping_timeout=120,
-                close_timeout=300,
+                close_timeout=10,
+                open_timeout=self.open_timeout,
             )
             self.is_connected = True
-            self.reconnect_delay = 1  # 重置重连延迟
+            self.reconnect_delay = self.initial_reconnect_delay
             self.reconnect_attempts = 0
+            self._connected_at = time.monotonic()
             logger.info("Connected successfully!")
             return True
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            logger.error(f"Connection failed: {e}")
+            logger.warning(f"Connection failed: {type(e).__name__}: {e}")
+            self.is_connected = False
+            await self._close_connection()
             return False
+
+    async def _close_connection(self):
+        """安全关闭当前连接"""
+        ws = self.ws_connection
+        self.ws_connection = None
+        if ws is None:
+            return
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+    def _reset_backoff(self):
+        """连接稳定运行后重置退避状态"""
+        if time.monotonic() - self._connected_at >= self.stable_connection_time:
+            self.reconnect_delay = self.initial_reconnect_delay
+            self.reconnect_attempts = 0
 
     async def send_message(self, message: dict):
         """发送消息到服务器"""
@@ -75,20 +114,33 @@ class WebSocketClient:
 
     async def receive_messages(self):
         """接收消息"""
-        while self.is_connected and self.ws_connection:
-            try:
-                message = await self.ws_connection.recv()
-                message_data = json.loads(message)
-                await self.handle_message(message_data)
+        try:
+            while self.is_connected and self.ws_connection:
+                try:
+                    message = await self.ws_connection.recv()
+                except websockets.exceptions.ConnectionClosed as e:
+                    logger.warning(f"Connection closed: {e}")
+                    break
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.warning(f"Error receiving message: {type(e).__name__}: {e}")
+                    break
 
-            except websockets.exceptions.ConnectionClosed:
-                logger.warning("Connection closed")
+                # 单条消息处理异常不应导致整个连接被丢弃
+                try:
+                    message_data = json.loads(message)
+                    await self.handle_message(message_data)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.error(f"Error handling message: {traceback.format_exc()}")
+        finally:
+            # 只有仍标记为已连接时才置为断开，避免打断正在进行的重连
+            if self.is_connected:
+                self._reset_backoff()
                 self.is_connected = False
-                break
-            except Exception as e:
-                logger.error(f"Error receiving message: {e}")
-                self.is_connected = False
-                break
+            await self._close_connection()
 
     async def handle_message(self, message: dict):
         """处理接收到的消息"""
@@ -119,7 +171,8 @@ class WebSocketClient:
             if message.get("code", 0) == "200":
                 logger.info("认证成功")
             else:
-                logger.error("认证失败")
+                # 认证失败属于服务端明确拒绝，重试无意义，交由人工修正 token
+                logger.error("认证失败，停止客户端，请检查 client.yml 中的 token")
                 self.should_reconnect = False
                 self.is_connected = False
 
@@ -176,39 +229,67 @@ class WebSocketClient:
         await self.send_message(history_request)
 
     async def auto_reconnect(self):
-        """自动重连逻辑"""
+        """自动重连逻辑（默认无限重试，指数退避 + 抖动）"""
         while self.should_reconnect:
             if not self.is_connected:
-                if (
-                    self.max_reconnect_attempts > 0
-                    and self.reconnect_attempts >= self.max_reconnect_attempts
-                ):
-                    logger.error("Max reconnection attempts reached. Stopping.")
+                if not await self._reconnect_once():
                     break
-
-                self.reconnect_attempts += 1
-                logger.info(
-                    f"Attempting to reconnect... (attempt {self.reconnect_attempts})"
-                )
-
-                if await self.connect():
-                    # 连接成功，启动消息接收
-                    await self.send_auth()
-                    await self.register_room(config.get("room_id", []))
-                    asyncio.create_task(self.receive_messages())
-                else:
-                    # 连接失败，等待一段时间后重试
-                    logger.info(
-                        f"Reconnection failed. Waiting {self.reconnect_delay} seconds..."
-                    )
-                    await asyncio.sleep(self.reconnect_delay)
-
-                    # 指数退避策略
-                    self.reconnect_delay = min(
-                        self.reconnect_delay * 2, self.max_reconnect_delay
-                    )
-
             await asyncio.sleep(1)  # 检查间隔
+
+    async def _reconnect_once(self):
+        """执行一次重连尝试，返回是否需要继续重连"""
+        self.reconnect_attempts += 1
+
+        if self.max_reconnect_attempts > 0:
+            logger.info(
+                f"Attempting to reconnect... (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts})"
+            )
+        else:
+            logger.info(f"Attempting to reconnect... (attempt {self.reconnect_attempts})")
+
+        if await self.connect():
+            await self._on_connected()
+        else:
+            await self._wait_before_retry()
+
+        return self.should_reconnect
+
+    async def _on_connected(self):
+        """连接建立后的初始化：认证、注册、启动接收任务"""
+        try:
+            await self.send_auth()
+            await self.register_room(config.get("room_id", []))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.error(f"Failed to initialize session: {traceback.format_exc()}")
+            self.is_connected = False
+            await self._close_connection()
+            return
+
+        # 避免重复创建接收任务
+        if self._receive_task is not None and not self._receive_task.done():
+            self._receive_task.cancel()
+        self._receive_task = asyncio.create_task(self.receive_messages())
+
+    async def _wait_before_retry(self):
+        """等待下一次重试"""
+        if self.max_reconnect_attempts > 0 and self.reconnect_attempts >= self.max_reconnect_attempts:
+            # 达到上限不停机，转为定频保活重试，等待服务端恢复
+            logger.warning(
+                f"已连续重连失败 {self.reconnect_attempts} 次，"
+                f"转为每 {self.max_reconnect_delay:.0f} 秒一次的保活重试"
+            )
+        delay = min(self.reconnect_delay, self.max_reconnect_delay)
+        # 加入抖动，避免多客户端同时重连造成惊群
+        delay *= random.uniform(0.8, 1.2)
+        logger.info(f"Reconnection failed. Waiting {delay:.1f} seconds...")
+        await asyncio.sleep(delay)
+
+        # 指数退避策略
+        self.reconnect_delay = min(
+            self.reconnect_delay * self.backoff_factor, self.max_reconnect_delay
+        )
 
     async def run(self):
         """运行客户端"""
@@ -222,19 +303,22 @@ class WebSocketClient:
             # 保持主循环运行
             while self.should_reconnect:
                 await asyncio.sleep(1)
-                if not self.is_connected and not self.should_reconnect:
-                    break
+        except asyncio.CancelledError:
+            pass
         finally:
             logger.info("Shutting down client...")
             self.should_reconnect = False
+            self.is_connected = False
 
-            # 等待任务完成
-            reconnect_task.cancel()
-            ping_task.cancel()
+            tasks = [reconnect_task, ping_task, self._receive_task]
+            for task in tasks:
+                if task is not None and not task.done():
+                    task.cancel()
+            # 等待被取消的任务真正结束
+            await asyncio.gather(*[t for t in tasks if t is not None], return_exceptions=True)
 
             # 关闭连接
-            if self.ws_connection:
-                await self.ws_connection.close()
+            await self._close_connection()
 
             logger.info("Client stopped.")
 
@@ -306,18 +390,20 @@ async def start():
     client_task = asyncio.create_task(client.run())
 
     try:
-        # 等待连接建立
-        await asyncio.sleep(3)
-
-        # 保持运行
-        while True:
+        # 客户端因认证失败等原因自行结束时，进程随之退出，避免空转僵死
+        while not client_task.done():
             await asyncio.sleep(1)
     except KeyboardInterrupt:
-        client.should_reconnect = False
-        client_task.cancel()
+        logger.info("收到退出信号，正在停止客户端...")
     finally:
         client.should_reconnect = False
-        client_task.cancel()
+        if not client_task.done():
+            client_task.cancel()
+        try:
+            await client_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("客户端已退出")
 
 
 if __name__ == "__main__":

@@ -5,3 +5,11 @@ user: "" # 录播姬基本认证用户名，未设置则留空
 password: "" # 录播姬基本认证密码，未设置则留空
 room_id: [""] # 需注册的房间号
 save_path: "/opt/bili_rec_monitor/RecordFiles"
+
+reconnect: # 可选，重连策略，不填则使用默认值
+  initial_delay: 1 # 初始重连间隔（秒）
+  max_delay: 300 # 最大重连间隔（秒）
+  backoff_factor: 1.5 # 每次失败后的退避倍数
+  max_attempts: 0 # 最大连续重连次数，0表示无限重连（用尽后转为 max_delay 间隔的保活重试，不会退出）
+  stable_time: 60 # 连接稳定维持超过该时长（秒）后重置退避状态
+  open_timeout: 15 # WebSocket 握手超时（秒）

@@ -44,6 +44,8 @@ class Timer:
             if not self._canceled: # 检查是否被取消
                 logging.info("计时结束，执行回调")
                 await callback() # 协程回调
+        except:
+            logging.warning("计时器被取消或出错")
         finally:
             self._is_running = False
 
