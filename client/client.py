@@ -5,12 +5,12 @@ import json
 import logging
 import aiohttp
 import aiofiles
+import config_loader  # 配置文件加载/同步
 import traceback
 import uuid
 import os
 import random
 import time
-import ruamel.yaml as YAML
 
 from datetime import datetime
 
@@ -22,10 +22,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-yaml = YAML.YAML(typ="rt")
-
-with open("client.yml", "r", encoding="utf-8") as f:
-    config = yaml.load(f)
+# 启动时核对配置文件：缺失项补默认值，多余项移除
+config = config_loader.load_config()
 
 
 class WebSocketClient:
@@ -326,8 +324,7 @@ class WebSocketClient:
 class DownloadManager:
     async def download_file(self, url, save_path):
         """下载单个文件"""
-        with open("client.yml", "r", encoding="utf-8") as f:
-            config = yaml.load(f)
+        config = config_loader.load_config()
 
         file = url.split("/")[-1]
         auth = aiohttp.BasicAuth(config["user"], config["password"]) if config.get("user") and config.get("password") else None

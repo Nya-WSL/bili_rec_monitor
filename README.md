@@ -57,6 +57,7 @@
 - 配置
 
     - 分别在服务端/客户端运行一次程序，自动生成 `server/config.yml` 与 `client/client.yml`
+    - 每次启动时会自动以 `*.example.yml` 为模板核对配置文件：**缺失项补默认值、多余/废弃项移除**，已有值保持不变，无需手动迁移配置
     - 参考示例文件 `server/config.example.yml`、`client/client.example.yml` 修改配置
         - 服务端：webhook 监听地址与端口、ws 开关与 token、录制文件路径、百度网盘开放平台 AppKey/SecretKey 等
         - 客户端：服务端 ws 地址与端口、token、录播姬基本认证、需注册的房间号、文件保存路径
@@ -85,10 +86,12 @@
 ├── uv.lock
 ├── server/               # 服务端：接收 webhook、处理与上传录播文件
 │   ├── bili_rec_monitor.py
+│   ├── config_loader.py  # 配置加载与同步（比对 config.example.yml）
 │   ├── pcs.py / pcs_auth.py
 │   └── openapi_client/   # 百度网盘开放平台接口
 └── client/               # 客户端：通过 ws 下载录播文件到本地
-    └── client.py
+    ├── client.py
+    └── config_loader.py  # 配置加载与同步（比对 client.example.yml）
 ```
 
 

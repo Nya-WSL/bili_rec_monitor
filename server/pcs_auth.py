@@ -1,9 +1,8 @@
-import yaml
+import config_loader
 import requests
 
 def auth():
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = config_loader.load_config()
 
     client_id = config["pcs"]["ClientId"]
     redirect_url = config["pcs"]["RedirectUrl"]

@@ -3,12 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Callable, Awaitable, Optional, Dict, List
 from datetime import datetime
 
-import ruamel.yaml as YAML
+import config_loader  # 配置文件加载/同步
 import pcs_auth # 百度云授权函数
 import logging
 import asyncio
 import uvicorn
-import shutil
 import json
 import pcs # 百度云上传函数
 import os
@@ -20,13 +19,8 @@ logging.basicConfig(level=logging.INFO,
                     datefmt='%Y-%m-%d %H:%M:%S'
                     )
 
-yaml = YAML.YAML(typ="rt")
-
-if not os.path.exists("config.yml"):
-    shutil.copy("config.example.yml", "config.yml")
-
-with open("config.yml", "r", encoding="utf-8") as f:
-    config = yaml.load(f)
+# 启动时核对配置文件：缺失项补默认值，多余项移除
+config = config_loader.load_config()
 
 client_list = {}
 auth_list = []
@@ -227,8 +221,7 @@ def format_msg(message):
 
 def create_wait_list(payload):
     logging.info("写入wait_list")
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f)
+    config = config_loader.load_config()
     for file_type in config["FileType"]:
         if not os.path.exists("wait_list.json"):
             with open("wait_list.json", "w+", encoding="utf-8") as f:
@@ -245,8 +238,7 @@ def create_wait_list(payload):
 
 # 录播文件移动到其他目录
 def move_record_file(payload):
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f)
+    config = config_loader.load_config()
 
     # record_file = "/" + config["local"]["RecordPath"] + payload["EventData"]["RelativePath"].split(".")[0]
     record_file = os.path.join(config["local"]["RecordPath"], payload["EventData"]["RelativePath"].split(".")[0])
@@ -285,19 +277,18 @@ def get_pcs_auth():
     """
     通过code模式获取百度网盘开放平台授权码，如成功获取将返回token，否则返回None
     """
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f)
+    config = config_loader.load_config()
     if config["pcs"]["AccessToken"] in ["", None]:
         try:
             if config["pcs"]["ClientId"] == "" or config["pcs"]["SecretKey"] == "":
                 raise ValueError("未配置ClientId或SecretKey")
 
             access_token = pcs_auth.auth()
-            print(access_token)
+            logging.debug(f"获取到百度网盘access_token: {access_token}")
             config["pcs"]["AccessToken"] = f"{access_token}"
 
-            with open("config.yml", "w", encoding="utf-8") as f:
-                yaml.dump(config, f)
+            # 保留注释写回配置文件
+            config_loader.save_config(config)
 
             return config["pcs"]["AccessToken"]
         except Exception as e:
@@ -330,8 +321,7 @@ def upload_pcs(path, file_path):
     pcs.create(access_token, path, isdir, size, uploadid, block_list, rtype, tmp_path)
 
 async def time_out_handler():
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f)
+    config = config_loader.load_config()
     with open("wait_list.json", "r", encoding="utf-8") as f:
         wait_list = json.load(f)
 
@@ -425,8 +415,7 @@ async def status():
 # 定义 Webhook 路由
 @app.post("/brec_hook")
 async def brec(request: Request):
-    with open("config.yml", "r", encoding="utf-8") as f:
-        config = yaml.load(f)
+    config = config_loader.load_config()
     # 获取录播姬发送的hook数据
     payload = await request.json()
     # 接收到的数据归纳至info日志
