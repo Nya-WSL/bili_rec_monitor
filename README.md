@@ -1,6 +1,6 @@
 # BILIBILI Record Monitor
 
-![server](https://img.shields.io/badge/Server-2.7.2-cyan) ![client](https://img.shields.io/badge/Client-2.7.2-cyan) ![python](https://img.shields.io/badge/Python->=3.9,<3.14-blue) ![os](https://img.shields.io/badge/OS-Linux|MacOS-orange) ![uv](https://img.shields.io/badge/deps-uv-blueviolet)
+![server](https://img.shields.io/badge/Server-2.7.2-cyan) ![client](https://img.shields.io/badge/Client-2.7.2-cyan) ![python](https://img.shields.io/badge/Python->=3.10,<3.14-blue) ![os](https://img.shields.io/badge/OS-Linux|MacOS-orange) ![uv](https://img.shields.io/badge/deps-uv-blueviolet)
 
 基于 BililiveRecorder 和 FastAPI 的BILIBILI录播文件监视器，用于监视B站直播状态并 `上传至百度网盘/下载至其他设备` 。
 
